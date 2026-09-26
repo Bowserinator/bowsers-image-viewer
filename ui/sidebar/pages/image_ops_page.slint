@@ -1,0 +1,267 @@
+// image_ops_page.slint
+// "Image operations" sidebar tab.
+//
+// Channel/analysis views as radio buttons, plus a heatmap checkbox.
+import { Palette, Metrics } from "../../theme.slint";
+import { ScrollView } from "std-widgets.slint";
+
+export enum ChannelMode {
+    rgb,
+    invert,
+    histogram,
+    red,
+    green,
+    blue,
+    luminance,
+    saturation,
+    sat-hue,
+    sobel-edge,
+    dog,
+    high-pass,
+    adaptive-binary,
+    superpixels,
+    lsb0,
+    lsb1,
+}
+
+component ThemeCheckBox inherits Rectangle {
+    in property <string> text;
+    in-out property <bool> checked: false;
+    callback toggled();
+
+    height: 22px;
+    horizontal-stretch: 1;
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.checked = !root.checked; root.toggled(); }
+    }
+
+    HorizontalLayout {
+        spacing: Metrics.spacing-sm;
+        alignment: start;
+
+        Rectangle {
+            width: 16px;
+            height: 16px;
+            border-radius: 3px;
+            border-width: 2px;
+            border-color: root.checked ? Palette.accent : Palette.fg-disabled;
+            background: root.checked ? Palette.accent : transparent;
+            y: (parent.height - self.height) / 2;
+
+            if root.checked: Text {
+                text: "\u{2713}";
+                color: Palette.bg-active;
+                font-size: 11px;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+
+        Text {
+            text: root.text;
+            color: Palette.fg-primary;
+            vertical-alignment: center;
+        }
+    }
+}
+
+component RadioOption inherits Rectangle {
+    in property <string> label;
+    in property <color> tint;
+    in property <bool> active;
+    callback clicked <=> touch.clicked;
+
+    height: 22px;
+    horizontal-stretch: 1;
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+    }
+
+    HorizontalLayout {
+
+        padding-right: Metrics.spacing-sm;
+        spacing: Metrics.spacing-sm;
+        alignment: start;
+
+        Rectangle {
+            width: 18px;
+            height: 18px;
+            border-radius: self.width / 2;
+            border-width: 2px;
+            border-color: root.active ? root.tint : Palette.fg-disabled;
+            background: transparent;
+            y: (parent.height - self.height) / 2;
+
+            if root.active: Rectangle {
+                x: 4px;
+                y: 4px;
+                width: 10px;
+                height: 10px;
+                border-radius: self.width / 2;
+                background: root.tint;
+            }
+        }
+
+        Text {
+            text: root.label;
+            color: root.active ? Palette.fg-primary : Palette.fg-muted;
+            vertical-alignment: center;
+        }
+    }
+}
+
+component Separator inherits Rectangle {
+    height: Metrics.spacing-md;
+    Rectangle {
+        y: (parent.height - 1px) / 2;
+        height: 1px;
+        width: parent.width;
+        background: Palette.border;
+    }
+}
+
+export component ImageOpsPage inherits Rectangle {
+    in-out property <ChannelMode> mode: ChannelMode.rgb;
+    in-out property <bool> heatmap-enabled: false;
+    callback mode-changed(ChannelMode);
+    callback heatmap-changed(bool);
+
+    ScrollView {
+        VerticalLayout {
+            padding: Metrics.spacing-sm;
+            spacing: 2px;
+            alignment: start;
+
+            RadioOption {
+                label: "RGB (Default view)";
+                tint: Palette.chan-rgb;
+                active: root.mode == ChannelMode.rgb;
+                clicked => { root.mode = ChannelMode.rgb; root.mode-changed(root.mode); }
+            }
+
+            RadioOption {
+                label: "Invert";
+                tint: Palette.chan-invert;
+                active: root.mode == ChannelMode.invert;
+                clicked => { root.mode = ChannelMode.invert; root.mode-changed(root.mode); }
+            }
+
+            RadioOption {
+                label: "Histogram";
+                tint: Palette.chan-histogram;
+                active: root.mode == ChannelMode.histogram;
+                clicked => { root.mode = ChannelMode.histogram; root.mode-changed(root.mode); }
+            }
+
+            Separator { }
+
+            RadioOption {
+                label: "Red";
+                tint: Palette.chan-r;
+                active: root.mode == ChannelMode.red;
+                clicked => { root.mode = ChannelMode.red; root.mode-changed(root.mode); }
+            }
+
+            RadioOption {
+                label: "Green";
+                tint: Palette.chan-g;
+                active: root.mode == ChannelMode.green;
+                clicked => { root.mode = ChannelMode.green; root.mode-changed(root.mode); }
+            }
+
+            RadioOption {
+                label: "Blue";
+                tint: Palette.chan-b;
+                active: root.mode == ChannelMode.blue;
+                clicked => { root.mode = ChannelMode.blue; root.mode-changed(root.mode); }
+            }
+
+            Separator { }
+
+            RadioOption {
+                label: "Luminance";
+                tint: Palette.chan-luma;
+                active: root.mode == ChannelMode.luminance;
+                clicked => { root.mode = ChannelMode.luminance; root.mode-changed(root.mode); }
+            }
+
+            RadioOption {
+                label: "Saturation";
+                tint: Palette.chan-sat;
+                active: root.mode == ChannelMode.saturation;
+                clicked => { root.mode = ChannelMode.saturation; root.mode-changed(root.mode); }
+            }
+
+            RadioOption {
+                label: "Sat + Hue";
+                tint: Palette.chan-sathue;
+                active: root.mode == ChannelMode.sat-hue;
+                clicked => { root.mode = ChannelMode.sat-hue; root.mode-changed(root.mode); }
+            }
+
+            Separator { }
+
+            RadioOption {
+                label: "Sobel Edge";
+                tint: Palette.chan-sobel;
+                active: root.mode == ChannelMode.sobel-edge;
+                clicked => { root.mode = ChannelMode.sobel-edge; root.mode-changed(root.mode); }
+            }
+
+            RadioOption {
+                label: "Diff. of Gaussians";
+                tint: Palette.chan-dog;
+                active: root.mode == ChannelMode.dog;
+                clicked => { root.mode = ChannelMode.dog; root.mode-changed(root.mode); }
+            }
+
+            RadioOption {
+                label: "High Pass";
+                tint: Palette.chan-highpass;
+                active: root.mode == ChannelMode.high-pass;
+                clicked => { root.mode = ChannelMode.high-pass; root.mode-changed(root.mode); }
+            }
+
+            RadioOption {
+                label: "Adaptive Binarization";
+                tint: Palette.chan-binary;
+                active: root.mode == ChannelMode.adaptive-binary;
+                clicked => { root.mode = ChannelMode.adaptive-binary; root.mode-changed(root.mode); }
+            }
+
+            RadioOption {
+                label: "Superpixels";
+                tint: Palette.chan-binary;
+                active: root.mode == ChannelMode.superpixels;
+                clicked => { root.mode = ChannelMode.superpixels; root.mode-changed(root.mode); }
+            }
+
+            Separator { }
+
+            RadioOption {
+                label: "LSB (0th bit)";
+                tint: Palette.chan-lsb0;
+                active: root.mode == ChannelMode.lsb0;
+                clicked => { root.mode = ChannelMode.lsb0; root.mode-changed(root.mode); }
+            }
+
+            RadioOption {
+                label: "LSB (1st bit)";
+                tint: Palette.chan-lsb1;
+                active: root.mode == ChannelMode.lsb1;
+                clicked => { root.mode = ChannelMode.lsb1; root.mode-changed(root.mode); }
+            }
+
+            Separator { }
+
+            ThemeCheckBox {
+                text: "Heatmap";
+                checked: root.heatmap-enabled;
+                toggled => { root.heatmap-enabled = self.checked; root.heatmap-changed(root.heatmap-enabled); }
+            }
+        }
+    }
+}

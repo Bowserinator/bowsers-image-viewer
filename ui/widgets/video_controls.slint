@@ -1,0 +1,223 @@
+// video_controls.slint
+// Control bar shown under the viewport while a video / animated GIF is active:
+//   [play/pause] 00:12 / 01:34 [=====o-----------] VOL [==o---]
+// Collapses to zero height when hidden (same pattern as the thumbstrip).
+import { Palette, Metrics } from "../theme.slint";
+import { Icons } from "../icons.slint";
+import { Tooltip } from "tooltip.slint";
+
+// std-widgets' Slider has a style-defined round handle that can't be restyled,
+// so this is a small square replacement with the same shape of API:
+//   `value` is bound by the parent; while the user drags, `changed(v)` fires on
+//   press and on every move, and `released(v)` fires once on release.
+export component SquareSlider inherits Rectangle {
+    in property <float> minimum: 0;
+    in property <float> maximum: 1;
+    in property <float> value: 0;
+    in property <bool> enabled: true;
+    in property <length> handle-width: 10px;
+    in property <length> handle-height: 14px;
+    in property <length> track-height: 4px;
+    callback changed(float);
+    callback released(float);
+
+    property <bool> dragging: false;
+    property <float> drag-value: 0;
+    property <float> shown-value: root.dragging ? root.drag-value : root.value;
+    property <float> fraction: root.maximum > root.minimum
+        ? max(0.0, min(1.0, (root.shown-value - root.minimum) / (root.maximum - root.minimum)))
+        : 0.0;
+
+    height: 20px;
+    opacity: root.enabled ? 1.0 : 0.4;
+
+    pure function value-at(x: length) -> float {
+        // The handle centre follows the pointer: map the usable travel to min..max.
+        let travel = max(1px, root.width - root.handle-width);
+        return root.minimum + (root.maximum - root.minimum)
+            * max(0.0, min(1.0, (x - root.handle-width / 2) / travel));
+    }
+
+    // Track
+    Rectangle {
+        x: 0px;
+        y: (parent.height - self.height) / 2;
+        width: parent.width;
+        height: root.track-height;
+        background: Palette.border-strong;
+    }
+    // Filled part
+    Rectangle {
+        x: 0px;
+        y: (parent.height - self.height) / 2;
+        width: root.handle-width / 2 + (parent.width - root.handle-width) * root.fraction;
+        height: root.track-height;
+        background: Palette.accent;
+    }
+    // Square handle
+    Rectangle {
+        x: (parent.width - self.width) * root.fraction;
+        y: (parent.height - self.height) / 2;
+        width: root.handle-width;
+        height: root.handle-height;
+        background: root.dragging ? Palette.accent-active
+                  : touch.has-hover ? Palette.accent-hover
+                  : Palette.fg-primary;
+    }
+
+    touch := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: MouseCursor.pointer;
+
+        pointer-event(e) => {
+            if (e.kind == PointerEventKind.down && e.button == PointerEventButton.left) {
+                root.dragging = true;
+                root.drag-value = root.value-at(self.mouse-x);
+                root.changed(root.drag-value);
+            } else if (e.kind == PointerEventKind.move && root.dragging) {
+                root.drag-value = root.value-at(self.mouse-x);
+                root.changed(root.drag-value);
+            } else if ((e.kind == PointerEventKind.up || e.kind == PointerEventKind.cancel) && root.dragging) {
+                root.dragging = false;
+                root.released(root.drag-value);
+            }
+        }
+    }
+}
+
+export component VideoControls inherits Rectangle {
+    in property <bool> shown: false;
+    in property <bool> playing: false;
+    in property <bool> has-audio: false;
+    in property <float> position: 0;      // seconds
+    in property <float> duration: 0;      // seconds (0 = unknown)
+    in property <string> time-text: "";   // "MM:SS / MM:SS", formatted in C++
+    in property <float> volume: 1;        // 0..1
+
+    // Tooltips: override from the parent or translate via @tr().
+    in property <string> play-tooltip: root.playing
+        ? @tr("Pause (Space)  \u{00B7}  frame step: , and .")
+        : @tr("Play (Space)  \u{00B7}  frame step: , and .");
+    in property <string> volume-label: @tr("VOL");
+
+    callback toggle-pause();
+    callback seek(float /* seconds */, bool /* final */);
+    callback volume-changed(float, bool /* final */);
+    callback time-label-clicked();
+
+    visible: root.shown;
+    clip: true;
+    min-height: 0px;
+    preferred-height: root.shown ? Metrics.videobar-height : 0px;
+    max-height: root.shown ? Metrics.videobar-height : 0px;
+    background: Palette.bg-panel;
+
+    Rectangle {
+        y: 0px;
+        height: Metrics.border-width;
+        background: Palette.border;
+    }
+
+    HorizontalLayout {
+        padding-left: Metrics.spacing-sm;
+        padding-right: Metrics.spacing-sm;
+        spacing: Metrics.spacing-sm;
+
+        // Play / pause (square)
+        VerticalLayout {
+            alignment: center;
+            Rectangle {
+                width: 28px;
+                height: 28px;
+                background: play-touch.has-hover ? Palette.bg-panel-alt : transparent;
+                border-width: Metrics.border-width;
+                border-color: Palette.border;
+
+                if !root.playing : Image {
+                    source: Icons.play-arrow;
+                    width: 20px;
+                    height: 20px;
+                    colorize: Palette.fg-primary;
+                    vertical-alignment: center;
+                    horizontal-alignment: center;
+                }
+                if root.playing : HorizontalLayout {
+                    alignment: center;
+                    spacing: 3px;
+                    padding-top: 8px;
+                    padding-bottom: 8px;
+                    Rectangle { width: 4px; background: Palette.fg-primary; }
+                    Rectangle { width: 4px; background: Palette.fg-primary; }
+                }
+
+                play-touch := TouchArea {
+                    mouse-cursor: MouseCursor.pointer;
+                    clicked => { root.toggle-pause(); }
+                }
+                Tooltip {
+                    width: 100%;
+                    height: 100%;
+                    text: root.play-tooltip;
+                    hovered: play-touch.has-hover && !play-touch.pressed;
+                    above: true;
+                }
+            }
+        }
+
+        // Time label: auto-sized and placed close to play button
+        Rectangle {
+            VerticalLayout {
+                alignment: center;
+                Text {
+                    text: root.time-text;
+                    color: Palette.fg-muted;
+                    font-size: Metrics.font-size-sm;
+                    horizontal-alignment: left;
+                    vertical-alignment: center;
+                }
+            }
+
+            time-touch := TouchArea {
+                mouse-cursor: MouseCursor.pointer;
+                clicked => { root.time-label-clicked(); }
+            }
+        }
+
+        // Expandable progress bar: takes up all remaining available width
+        VerticalLayout {
+            horizontal-stretch: 1;
+            alignment: center;
+            SquareSlider {
+                width: 100%;
+                enabled: root.duration > 0;
+                maximum: root.duration;
+                value: root.position;
+                changed(v) => { root.seek(v, false); }
+                released(v) => { root.seek(v, true); }
+            }
+        }
+
+        // Volume controls pinned to the right edge
+        if root.has-audio : HorizontalLayout {
+            width: 132px;
+            spacing: Metrics.spacing-sm;
+            Text {
+                width: 30px;
+                text: root.volume-label;
+                color: Palette.fg-muted;
+                font-size: Metrics.font-size-sm;
+                vertical-alignment: center;
+            }
+            VerticalLayout {
+                alignment: center;
+                SquareSlider {
+                    width: 96px;
+                    maximum: 1;
+                    value: root.volume;
+                    changed(v) => { root.volume-changed(v, false); }
+                    released(v) => { root.volume-changed(v, true); }
+                }
+            }
+        }
+    }
+}

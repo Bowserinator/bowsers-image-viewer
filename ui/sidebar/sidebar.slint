@@ -1,0 +1,131 @@
+// sidebar.slint
+// Left-hand panel with a tab bar: [View] [Metadata] [Folder].
+import { Palette, Metrics, SidebarTab } from "../theme.slint";
+import { ChannelMode, ImageOpsPage } from "pages/image_ops_page.slint";
+import { MetadataPage } from "pages/metadata_page.slint";
+import { FolderPage, FolderRow } from "pages/folder_page.slint";
+
+component TabButton inherits Rectangle {
+    in property <string> label;
+    in property <bool> active: false;
+    callback clicked <=> touch.clicked;
+
+    height: Metrics.sidebar-tabbar-height;
+    background: touch.pressed ? Palette.bg-panel-alt : Palette.bg-tab;
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+    }
+
+    VerticalLayout {
+        Text {
+            text: root.label;
+            color: active ? Palette.fg-primary : Palette.fg-muted;
+            font-size: Metrics.font-size-md;
+            vertical-alignment: center;
+            horizontal-alignment: center;
+        }
+        Rectangle {
+            height: Metrics.border-width;
+            width: 100%;
+            background: active ? Palette.accent : transparent;
+        }
+    }
+}
+
+export component Sidebar inherits Rectangle {
+    in property <string> filename;
+    in property <string> file-path;
+    in property <string> file-dimensions;
+    in property <string> file-aspect-ratio;
+    in property <string> file-size;
+    in property <string> file-format;
+    in property <string> file-encoding;
+    in property <string> exif-camera;
+    in property <string> exif-date;
+    in property <string> exif-exposure;
+    in property <string> exif-aperture;
+    in property <string> exif-iso;
+    in property <string> exif-focal;
+    in property <string> exif-gps;
+    in-out property <SidebarTab> active-tab: SidebarTab.metadata;
+    in-out property <ChannelMode> channel-mode: ChannelMode.rgb;
+    in-out property <bool> heatmap-enabled: false;
+    callback channel-mode-changed(ChannelMode);
+    callback heatmap-changed(bool);
+    callback tab-changed(SidebarTab);
+    in property <[FolderRow]> folder-rows: [];
+    in property <bool> folder-loading: false;
+    callback folder-row-clicked(int);
+
+    background: Palette.bg-panel;
+
+    Rectangle {
+        x: parent.width - Metrics.border-width;
+        y: 0;
+        width: Metrics.border-width;
+        height: parent.height;
+        background: Palette.border;
+    }
+
+    VerticalLayout {
+        spacing: Metrics.spacing-sm;
+
+        HorizontalLayout {
+            TabButton {
+                label: "View";
+                active: root.active-tab == SidebarTab.ops;
+                clicked => { root.active-tab = SidebarTab.ops; root.tab-changed(SidebarTab.ops); }
+            }
+            TabButton {
+                label: "Metadata";
+                active: root.active-tab == SidebarTab.metadata;
+                clicked => { root.active-tab = SidebarTab.metadata; root.tab-changed(SidebarTab.metadata); }
+            }
+            TabButton {
+                label: "Folder";
+                active: root.active-tab == SidebarTab.folder;
+                clicked => { root.active-tab = SidebarTab.folder; root.tab-changed(SidebarTab.folder); }
+            }
+        }
+
+        // `if` (not `visible`) so inactive pages are removed from the layout
+        // instead of still reserving a third of the height each.
+        if root.active-tab == SidebarTab.ops : ImageOpsPage {
+            vertical-stretch: 1;
+            mode: root.channel-mode;
+            heatmap-enabled: root.heatmap-enabled;
+            mode-changed(m) => {
+                root.channel-mode = m;
+                root.channel-mode-changed(m);
+            }
+            heatmap-changed(enabled) => {
+                root.heatmap-enabled = enabled;
+                root.heatmap-changed(enabled);
+            }
+        }
+        if root.active-tab == SidebarTab.metadata : MetadataPage {
+            vertical-stretch: 1;
+            filename: root.filename;
+            path: root.file-path;
+            dimensions: root.file-dimensions;
+            aspect-ratio: root.file-aspect-ratio;
+            size: root.file-size;
+            format: root.file-format;
+            encoding: root.file-encoding;
+            exif-camera: root.exif-camera;
+            exif-date: root.exif-date;
+            exif-exposure: root.exif-exposure;
+            exif-aperture: root.exif-aperture;
+            exif-iso: root.exif-iso;
+            exif-focal: root.exif-focal;
+            exif-gps: root.exif-gps;
+        }
+        if root.active-tab == SidebarTab.folder : FolderPage {
+            vertical-stretch: 1;
+            rows: root.folder-rows;
+            loading: root.folder-loading;
+            row-clicked(i) => { root.folder-row-clicked(i); }
+        }
+    }
+}

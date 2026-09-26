@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Bowsers Image Viewer
+Comment=View and analyze images
+Exec=bowsers_image_viewer %F
+Icon=bowsers_image_viewer
+Terminal=false
+Categories=Graphics;Viewer;
+MimeType=image/png;image/jpeg;image/gif;image/bmp;image/webp;image/avif;image/tiff;image/svg+xml;
+Keywords=image;viewer;graphics;
+StartupNotify=true

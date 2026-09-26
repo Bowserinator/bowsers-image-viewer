@@ -1,0 +1,34 @@
+// tooltip_layer.slint
+// The one and only visible tooltip box. Instantiate this ONCE, as the LAST
+// child of the root Window (after Toolbar, the viewport, Thumbstrip,
+// StatusBar — whatever else is in there), so it paints on top of all of
+// them regardless of which button the hover came from. Purely visual: no
+// TouchArea anywhere in this subtree, so it never intercepts pointer events
+// — clicks pass straight through to whatever is underneath.
+import { Palette, Metrics } from "../theme.slint";
+import { TooltipState } from "tooltip_state.slint";
+
+export component TooltipLayer inherits Rectangle {
+    visible: TooltipState.visible && TooltipState.text != "";
+    x: TooltipState.align-end
+        ? TooltipState.anchor-x + TooltipState.anchor-width - self.width
+        : TooltipState.anchor-x;
+    y: TooltipState.above
+        ? TooltipState.anchor-y - self.height - Metrics.spacing-xs
+        : TooltipState.anchor-y + TooltipState.anchor-height + Metrics.spacing-xs;
+    width: label.preferred-width + 2 * Metrics.spacing-sm;
+    height: label.preferred-height + 2 * Metrics.spacing-xs;
+    background: Palette.bg-panel-alt;
+    border-width: Metrics.border-width;
+    border-color: Palette.border;
+    border-radius: 3px;
+
+    label := Text {
+        x: Metrics.spacing-sm;
+        y: Metrics.spacing-xs;
+        text: TooltipState.text;
+        color: Palette.fg-primary;
+        font-size: Metrics.font-size-sm;
+        wrap: no-wrap;
+    }
+}

@@ -1,0 +1,14 @@
+{
+  "version": 6,
+  "configurePresets": [
+    {
+      "name": "windows-x86_64-mingw",
+      "displayName": "Windows x86_64 (MinGW-w64)",
+      "binaryDir": "${sourceDir}/build-win",
+      "toolchainFile": "${sourceDir}/cmake/toolchains/windows-x86_64-mingw.cmake",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    }
+  ]
+}

@@ -1,0 +1,91 @@
+// folder_page.slint
+// "Folder view" sidebar tab: a lazily-loaded directory tree backed by
+// FolderModel (C++). ListView only instantiates the rows on screen, so the
+// row count can be very large.
+import { ListView } from "std-widgets.slint";
+import { Palette, Metrics } from "../../theme.slint";
+import { Icons } from "../../icons.slint";
+
+// Keep field names in sync with FolderModel::row_data().
+export struct FolderRow {
+    name: string,
+    depth: int,
+    is-dir: bool,
+    is-video: bool,
+    expanded: bool,
+    loading: bool,
+    current: bool,
+}
+
+export component FolderPage inherits Rectangle {
+    in property <[FolderRow]> rows: [];
+    in property <bool> loading: false;
+    callback row-clicked(int /* row index */);
+
+    property <length> row-height: 22px;
+    property <length> indent: 14px;
+
+    if root.rows.length == 0 : Text {
+        x: Metrics.spacing-lg;
+        y: Metrics.spacing-lg;
+        text: root.loading ? @tr("Loading\u{2026}") : @tr("No folder open");
+        color: Palette.fg-disabled;
+        font-size: Metrics.font-size-sm;
+    }
+
+    ListView {
+        for row[i] in root.rows : Rectangle {
+            height: root.row-height;
+            background: touch.has-hover ? Palette.bg-panel-alt : transparent;
+
+            HorizontalLayout {
+                padding-left: Metrics.spacing-sm + row.depth * root.indent;
+                padding-right: Metrics.spacing-sm;
+                spacing: Metrics.spacing-xs;
+
+                // Icon: folder (open/closed), video file, or image file; ellipsis
+                // while loading. Wrapped in a centered VerticalLayout so the fixed-
+                // size icon lines up with the label's vertical center, matching the
+                // pattern used elsewhere (see ToolbarIconButton in toolbar.slint).
+                VerticalLayout {
+                    alignment: center;
+                    Image {
+                        width: row.is-dir && row.loading ? 0px : 16px;
+                        height: 16px;
+                        vertical-alignment: center;
+                        source: row.is-dir
+                            ? (row.expanded ? Icons.folder-open : Icons.folder)
+                            : (row.is-video ? Icons.video-file : Icons.image);
+                        colorize: row.current ? Palette.accent : Palette.fg-muted;
+                    }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    Text {
+                        width: row.is-dir && row.loading ? 16px : 0px;
+                        text: "\u{2026}";
+                        color: Palette.fg-muted;
+                        font-size: Metrics.font-size-sm;
+                        vertical-alignment: center;
+                    }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    Text {
+                        text: row.name;
+                        color: row.current ? Palette.accent : (row.is-dir ? Palette.fg-primary : Palette.fg-muted);
+                        font-size: Metrics.font-size-md;
+                        font-weight: row.current ? 700 : 400;
+                        overflow: elide;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+
+            touch := TouchArea {
+                mouse-cursor: pointer;
+                clicked => { root.row-clicked(i); }
+            }
+        }
+    }
+}

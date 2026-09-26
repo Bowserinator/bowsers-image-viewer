@@ -1,0 +1,125 @@
+// theme.slint
+// Single source of truth for colors/spacing/typography, and for the small
+// enums/constants that C++ must otherwise agree with by hand. Nothing in
+// src/ redefines a value that lives here: AppController reads it back from
+// the compiled UI via `global<Metrics>()` / `global<...>()` instead
+// (see src/ui/app.cpp / config.hpp).
+
+// Viewport background behind the image. Declared here (not in app.slint)
+// so both app.slint and widgets/toolbar.slint can share one definition.
+export enum BgColorMode { black, white, checkerboard }
+
+export enum InterpolationMode { regular, pixel-perfect, pixel-perfect-grid }
+
+// Which sidebar page is showing. Order matters: it is persisted to disk as
+// a plain int (see kSTORE_KEY_SIDEBAR_TAB in src/ui/app.cpp), so the C++
+// side converts it via an explicit switch keyed on these names, not a
+// numeric clamp against a separately hardcoded max.
+export enum SidebarTab { ops, metadata, folder }
+
+// Sibling sort order for the status bar's sort toggle. Order matters: it is
+// persisted to disk as a plain int (see kSTORE_KEY_SORT_OPTION in
+// src/ui/app.cpp), so the C++ side converts it via an explicit switch keyed
+// on these names, not a numeric clamp against a separately hardcoded max.
+export enum SortOption { name, size, mtime }
+
+export global Palette {
+    in-out property <bool> dark-mode: true;
+
+    // Surfaces
+    out property <color> bg-app: dark-mode ? #1d1d1d : #f5f5f5;
+    out property <color> bg-panel: dark-mode ? #282828 : #ffffff;
+    out property <color> bg-panel-alt: dark-mode ? #313131 : #e8e8e8;
+    out property <color> bg-viewport: dark-mode ? #141414 : #d0d0d0;
+    out property <color> bg-tab: dark-mode ? #232323 : #f0f0f0;
+
+    // Foreground
+    out property <color> fg-primary: dark-mode ? #e6e6e6 : #1a1a1a;
+    out property <color> fg-muted: dark-mode ? #9a9a9a : #666666;
+    out property <color> fg-disabled: dark-mode ? #4a4a4a : #b0b0b0;
+
+    // Accent / selection
+    out property <color> accent: dark-mode ? #4f8cff : #2563eb;
+    out property <color> accent-hover: dark-mode ? #6ea0ff : #3b82f6;
+    out property <color> accent-active: dark-mode ? #3a6fd9 : #1d4ed8;
+    out property <color> bg-active: dark-mode ? #ffffff : #333333;
+
+    // Borders (thin, flat, no glow/shadow)
+    out property <color> border: dark-mode ? #353535 : #d1d5db;
+    out property <color> border-strong: dark-mode ? #4a4a4a : #9ca3af;
+
+    // Channel-mode buttons get subtle per-mode tints for quick recognition
+    out property <color> chan-rgb: dark-mode ? #e8eaed : #1a1a1a;
+    out property <color> chan-r: #ff6b6b;
+    out property <color> chan-g: #6bff8f;
+    out property <color> chan-b: #6ba8ff;
+    out property <color> chan-luma: #d0d0d0;
+    out property <color> chan-sat: #c9c9c9;
+    out property <color> chan-sathue: #ff9f4f;
+    out property <color> chan-heatmap: #ff4fd0;
+    out property <color> chan-sobel: #50e0b0;
+    out property <color> chan-dog: #c080ff;
+    out property <color> chan-invert: #ffd23f;
+    out property <color> chan-histogram: #000000;
+    out property <color> chan-binary: #4ea8de;
+    out property <color> chan-highpass: #f4845f;
+    out property <color> chan-lsb0: #38b000;
+    out property <color> chan-lsb1: #9d4edd;
+}
+
+export global Metrics {
+    // Every rectangle/button in the app should use this: 0 = square corners.
+    out property <length> corner-radius: 0px;
+
+    out property <length> spacing-xs: 4px;
+    out property <length> spacing-sm: 8px;
+    out property <length> spacing-md: 12px;
+    out property <length> spacing-lg: 20px;
+
+    out property <length> border-width: 1px;
+    out property <length> toolbar-height: 32px;
+    out property <length> channel-bar-height: 32px;
+    out property <length> statusbar-height: 36px;
+    out property <length> videobar-height: 36px;
+    out property <length> tabbar-height: 22px;
+    // Default height of the resizable thumbstrip, plus the bounds the drag
+    // handle clamps to. The max keeps the entry cell (height minus 2 *
+    // spacing-sm padding) at or below kDEFAULT_THUMBNAIL_MAX_DIM in
+    // config.hpp, so thumbnails are never scaled up past their decoded size.
+    out property <length> thumbstrip-height: 84px;
+    out property <length> thumbstrip-height-min: 60px;
+    out property <length> thumbstrip-height-max: 144px;
+
+    out property <length> sidebar-width: 280px;
+    out property <length> sidebar-tabbar-height: 32px;
+    out property <length> sidebar-width-min: 180px;
+    out property <length> sidebar-width-max: 520px;
+    out property <length> metadata-row-height: 18px;
+
+    out property <length> font-size-sm: 11px;
+    out property <length> font-size-md: 12px;
+    out property <length> font-size-lg: 14px;
+
+    out property <length> icon-size: 17px;
+
+    // ---- Window sizing ----
+    // AppController reads these back (global<Metrics>()) instead of keeping
+    // its own kDEFAULT_WINDOW_*/kMIN_WINDOW_* copies in config.hpp.
+    out property <float> window-width-default: 1280;
+    out property <float> window-height-default: 800;
+    out property <float> window-width-min: 480;
+    out property <float> window-height-min: 320;
+
+    // ---- Thumbstrip layout ----
+    // The entry width at the default thumbstrip height. widgets/thumbstrip.slint
+    // scales it with the strip's height (keeping the entry aspect ratio) to
+    // get its `entry-width`, which AppController reads back through the
+    // window's `thumb-entry-width` (plus `spacing-sm` above) for the
+    // prefetch-window math in on_thumbstrip_scrolled().
+    out property <float> thumb-entry-width: 64;
+
+    // ---- Transparency checkerboard ----
+    // Starting cell size before AppController halves/doubles it for zoom;
+    // app.slint's `checker-cell` in-property defaults to this.
+    out property <length> checker-cell-base: 8px;
+}

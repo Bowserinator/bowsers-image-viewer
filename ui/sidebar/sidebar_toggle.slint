@@ -1,0 +1,51 @@
+// sidebar_toggle.slint
+// Small hamburger button embedded as the leftmost item of the status bar;
+// toggles the left sidebar panel.
+import { Palette, Metrics } from "../theme.slint";
+import { Tooltip } from "../widgets/tooltip.slint";
+import { Icons } from "../icons.slint";
+
+export component SidebarToggle inherits Rectangle {
+    in property <bool> active: false;
+    in property <string> tooltip-text: @tr("Toggle sidebar");
+    callback clicked();
+
+    height: Metrics.statusbar-height - 2 * Metrics.spacing-xs;
+    width: self.height;
+    vertical-stretch: 0;
+    accessible-role: button;
+    accessible-label: root.tooltip-text;
+
+    Rectangle {
+        background: root.active ? (Palette.bg-active)
+                  : touch.has-hover ? Palette.bg-panel-alt
+                  : transparent;
+
+        touch := TouchArea {
+            clicked => { root.clicked(); }
+            mouse-cursor: pointer;
+        }
+
+        VerticalLayout {
+            alignment: center;
+            HorizontalLayout {
+                alignment: center;
+                Image {
+                    source: Icons.side-navigation;
+                    width: Metrics.icon-size;
+                    height: Metrics.icon-size;
+                    colorize: root.active ? Palette.bg-app : Palette.fg-muted;
+                    vertical-alignment: center;
+                }
+            }
+        }
+
+        Tooltip {
+            width: 100%;
+            height: 100%;
+            text: root.tooltip-text;
+            hovered: touch.has-hover && !touch.pressed;
+            above: true;  // lives in the bottom status bar
+        }
+    }
+}

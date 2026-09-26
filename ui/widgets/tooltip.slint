@@ -1,0 +1,55 @@
+// tooltip.slint
+// Hover tooltip for any element. Add it as a child that fills the element you
+// want to annotate, then bind `text` and `hovered`:
+//
+//     Tooltip { width: 100%; height: 100%; text: root.tooltip-text; hovered: touch.has-hover; }
+//
+// Shown after `delay`, hidden as soon as `hovered` goes false. Empty text
+// disables it. Wrap the text in @tr() at the call site to translate it.
+//
+// This component does NOT render anything itself — it has zero size and no
+// TouchArea, so it can never block clicks to the button it's attached to.
+// It only computes the button's on-screen position (via absolute-position)
+// and pushes text/position into TooltipState. The actual floating box is
+// drawn once, on top of everything, by TooltipLayer.
+import { TooltipState } from "tooltip_state.slint";
+
+export component Tooltip inherits Rectangle {
+    in property <string> text;
+    in property <bool> hovered;
+    in property <duration> delay: 500ms;
+    // Anchor the tooltip to the right edge of the element instead of the left
+    // (use for elements near the window's right edge so it isn't clipped).
+    in property <bool> align-end: false;
+    // Show above the element instead of below (for elements near the bottom).
+    in property <bool> above: false;
+
+    property <bool> shown: false;
+    width: 0px;
+    height: 0px;
+
+    changed hovered => {
+        if (!root.hovered) {
+            root.shown = false;
+            TooltipState.visible = false;
+        }
+    }
+
+    Timer {
+        interval: root.delay;
+        running: root.hovered && !root.shown && root.text != "";
+        triggered => {
+            root.shown = true;
+            // root here still has the width/height/position of the button,
+            // since the call site sets `width: 100%; height: 100%;` on us.
+            TooltipState.text = root.text;
+            TooltipState.anchor-x = root.absolute-position.x;
+            TooltipState.anchor-y = root.absolute-position.y;
+            TooltipState.anchor-width = root.width;
+            TooltipState.anchor-height = root.height;
+            TooltipState.align-end = root.align-end;
+            TooltipState.above = root.above;
+            TooltipState.visible = true;
+        }
+    }
+}

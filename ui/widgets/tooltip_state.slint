@@ -1,0 +1,16 @@
+// tooltip_state.slint
+// Shared hover-tooltip state. Any button anywhere in the tree writes into
+// this singleton on hover; a single TooltipLayer (see tooltip_layer.slint),
+// mounted once as the LAST child of the root Window, reads it and draws the
+// floating box on top of literally everything else. Nothing here has a
+// TouchArea, so nothing here can ever swallow a click.
+export global TooltipState {
+    in-out property <string> text: "";
+    in-out property <length> anchor-x: 0px;
+    in-out property <length> anchor-y: 0px;
+    in-out property <length> anchor-width: 0px;
+    in-out property <length> anchor-height: 0px;
+    in-out property <bool> align-end: false;
+    in-out property <bool> above: false;
+    in-out property <bool> visible: false;
+}

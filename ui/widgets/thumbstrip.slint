@@ -1,0 +1,169 @@
+// thumbstrip.slint
+import { Palette, Metrics } from "../theme.slint";
+
+export struct ThumbEntry {
+    name: string,
+    image: image,
+    is-current: bool,
+}
+
+export component Thumbstrip inherits Rectangle {
+    in property <[ThumbEntry]> entries: [];
+    in property <int> current-index: 0;
+    in property <bool> shown: true;
+    // The height the user dragged the strip to. Two-way bound to the window's
+    // `thumbstrip-height`, which C++ persists. `effective-height` is the
+    // clamped value that actually lays out. It must not depend on the window
+    // size: the window's height is derived from this strip's layout info, so
+    // that would be a binding loop.
+    in-out property <length> strip-height: Metrics.thumbstrip-height;
+    property <length> effective-height: max(Metrics.thumbstrip-height-min,
+                                            min(root.strip-height, Metrics.thumbstrip-height-max));
+    // Entry width, scaled with the strip height so entries keep the aspect
+    // ratio they have at the default height (Metrics.thumb-entry-width there).
+    // AppController reads this back via the window's `thumb-entry-width`
+    // for its prefetch-window math instead of a hand-synced constant.
+    out property <float> entry-width: Metrics.thumb-entry-width
+        * (root.effective-height - 2 * Metrics.spacing-sm)
+        / (Metrics.thumbstrip-height - 2 * Metrics.spacing-sm);
+    callback entry-clicked(int /* index */);
+    callback scrolled(float /* viewport_x */, float /* viewport_width */);
+    // Fired once when a resize drag ends, so C++ can persist the new height.
+    callback resize-finished();
+
+    // Entry stride (entry width + spacing) as of the last entry-width change,
+    // used to keep the same entries in view when the stride changes. Starts
+    // at the default-height stride (a constant, so it can't track entry-width).
+    property <length> last-stride: Metrics.thumb-entry-width * 1px + Metrics.spacing-sm;
+
+    // Visible range in content pixels, read by C++ to (re)queue thumbs.
+    out property <float> viewport-x: -flick.viewport-x / 1px;
+    out property <float> viewport-w: flick.width / 1px;
+
+    // Resize / show / hide don't fire `flicked`, so push the new range explicitly.
+    changed width => { root.scrolled(root.viewport-x, root.viewport-w); }
+    changed shown => { root.scrolled(root.viewport-x, root.viewport-w); }
+    // Resizing the strip rescales the entries, which moves them within the
+    // content: rescale the scroll offset so the same entries stay in view,
+    // clamp it to the new content width, and push the new visible range.
+    changed entry-width => {
+        let stride = root.entry-width * 1px + Metrics.spacing-sm;
+        let ratio = stride / root.last-stride;
+        let max-off = max(0px, flick.viewport-width - flick.width);
+        flick.viewport-x = -min(max-off, max(0px, -flick.viewport-x * ratio));
+        root.last-stride = stride;
+        root.scrolled(-flick.viewport-x / 1px, flick.width / 1px);
+    }
+
+    // Collapse to zero height when hidden. min/preferred/max are all set so the
+    // parent VerticalLayout can't keep reserving the space.
+    visible: root.shown;
+    clip: true;
+    min-height: 0px;
+    preferred-height: root.shown ? root.effective-height : 0px;
+    max-height: root.shown ? root.effective-height : 0px;
+    background: Palette.bg-panel;
+
+    Rectangle {
+        y: 0px;
+        height: Metrics.border-width;
+        background: grab.pressed ? Palette.accent
+            : grab.has-hover ? Palette.border-strong
+            : Palette.border;
+    }
+
+    TouchArea {
+        width: 100%;
+        height: 100%;
+
+        scroll-event(e) => {
+            if root.entries.length == 0 { return reject; }
+            // viewport-x is <= 0 (0 = start, -max-off = end).
+            let max-off = max(0px, flick.viewport-width - flick.width);
+            flick.viewport-x = max(-max-off, min(0px, flick.viewport-x + e.delta-x + 2 * e.delta-y));
+            root.scrolled(-flick.viewport-x / 1px, flick.width / 1px);
+            return accept;
+        }
+
+        flick := Flickable {
+            y: Metrics.border-width;
+            viewport-height: self.height;
+
+            flicked => {
+                root.scrolled(-flick.viewport-x / 1px, flick.width / 1px);
+            }
+
+            HorizontalLayout {
+                padding: Metrics.spacing-sm;
+                spacing: Metrics.spacing-sm;
+
+                for entry[i] in root.entries: Rectangle {
+                    // Width comes from root.entry-width (see property doc
+                    // above); kept as a property, not a literal, so C++ and
+                    // Slint can't drift apart on this value.
+                    width: root.entry-width * 1px;
+                    border-width: Metrics.border-width;
+                    border-color: entry.is-current ? Palette.accent : Palette.border;
+                    background: Palette.bg-viewport;
+
+                    TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => {
+                            root.entry-clicked(i);
+                        }
+                    }
+
+                    Image {
+                        source: entry.image;
+                        image-fit: contain;
+                        width: parent.width - 4px;
+                        height: parent.height - 4px;
+                        x: 2px; y: 2px;
+                    }
+                }
+            }
+        }
+    }
+
+    // Auto-center on current index when called from C++ after navigation
+    callback center-on-index(int);
+    center-on-index(idx) => {
+        let max-off = max(0px, flick.viewport-width - flick.width);
+        let target = Metrics.spacing-sm + idx * (root.entry-width * 1px + Metrics.spacing-sm) + root.entry-width * 1px / 2 - flick.width / 2;
+        flick.viewport-x = -max(0px, min(max-off, target));
+        root.scrolled(-flick.viewport-x / 1px, flick.width / 1px);
+    }
+
+    // Resize handle along the top edge, drawn over the strip: drag up to make
+    // it taller, down to make it shorter. It sits inside the strip's top
+    // padding, so it never covers an entry.
+    grab := TouchArea {
+        y: 0px;
+        width: 100%;
+        height: Metrics.spacing-sm;
+        mouse-cursor: MouseCursor.row-resize;
+
+        property <bool> dragging: false;
+        property <length> start-pointer-y: 0px;
+        property <length> start-height: 0px;
+
+        pointer-event(e) => {
+            if (e.kind == PointerEventKind.down && e.button == PointerEventButton.left) {
+                self.dragging = true;
+                // The strip is bottom-anchored, so this handle moves as the
+                // height changes; measure the pointer in window coordinates
+                // so that movement doesn't feed back into the drag.
+                self.start-pointer-y = self.absolute-position.y + self.mouse-y;
+                self.start-height = root.effective-height;
+            } else if (e.kind == PointerEventKind.move && self.dragging) {
+                let pointer-y = self.absolute-position.y + self.mouse-y;
+                root.strip-height = max(Metrics.thumbstrip-height-min,
+                                        min(Metrics.thumbstrip-height-max,
+                                            self.start-height - (pointer-y - self.start-pointer-y)));
+            } else if (e.kind == PointerEventKind.up && self.dragging) {
+                self.dragging = false;
+                root.resize-finished();
+            }
+        }
+    }
+}

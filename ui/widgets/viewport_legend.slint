@@ -1,0 +1,40 @@
+// viewport_legend.slint
+// Vertical gradient legend for the heatmap overlay, shown in the bottom-left
+// corner of the viewport when heatmap mode is active.
+import { Palette, Metrics } from "../theme.slint";
+
+export component ViewportLegend inherits Rectangle {
+    visible: false;
+    width: 20px;
+    height: 80px;
+    background: Palette.bg-panel;
+    border-width: Metrics.border-width;
+    border-color: Palette.border;
+    clip: true;
+
+    // Purple-to-red gradient bar
+    Rectangle {
+        x: 4px;
+        y: 18px;
+        width: 12px;
+        height: parent.height - 36px;
+        background: @linear-gradient(0deg, #4d0080, #0000ff, #00ff00, #ffff00, #ff0000);
+    }
+
+    Text {
+        x: (parent.width - self.width) / 2;
+        y: 2px;
+        text: "High";
+        color: Palette.fg-muted;
+        font-size: 8px;
+        horizontal-alignment: center;
+    }
+    Text {
+        x: (parent.width - self.width) / 2;
+        y: parent.height - 14px;
+        text: "Low";
+        color: Palette.fg-muted;
+        font-size: 8px;
+        horizontal-alignment: center;
+    }
+}

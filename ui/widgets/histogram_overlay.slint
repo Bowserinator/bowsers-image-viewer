@@ -1,0 +1,102 @@
+// histogram_overlay.slint
+// R/G/B/K histogram chart, drawn over the top-left of the image viewport
+// when ChannelMode.histogram is active. Path data and label text are
+// computed in C++ (see src/processing/histogram.hpp) and pushed in as plain
+// strings, so this component only lays them out.
+import { Palette } from "../theme.slint";
+
+export component HistogramOverlay inherits Rectangle {
+    in property <bool> active: false;
+    in property <string> path-r: "";
+    in property <string> path-g: "";
+    in property <string> path-b: "";
+    in property <string> path-k: "";
+    in property <string> label-r-text: "";
+    in property <string> label-g-text: "";
+    in property <string> label-b-text: "";
+    in property <string> label-k-text: "";
+
+    visible: root.active;
+    width: 400px;
+    height: 300px;
+    background: #000000a8;
+    border-width: 1px;
+    border-color: Palette.border;
+    clip: true;
+
+    Path {
+        width: 100%;
+        height: 100%;
+        viewbox-width: 400;
+        viewbox-height: 300;
+        commands: root.path-r;
+        stroke: #ff5347;
+        stroke-width: 1.5px;
+        fill: transparent;
+    }
+
+    Path {
+        width: 100%;
+        height: 100%;
+        viewbox-width: 400;
+        viewbox-height: 300;
+        commands: root.path-g;
+        stroke: #3ddc6a;
+        stroke-width: 1.5px;
+        fill: transparent;
+    }
+
+    Path {
+        width: 100%;
+        height: 100%;
+        viewbox-width: 400;
+        viewbox-height: 300;
+        commands: root.path-b;
+        stroke: #4f9dff;
+        stroke-width: 1.5px;
+        fill: transparent;
+    }
+
+    Path {
+        width: 100%;
+        height: 100%;
+        viewbox-width: 400;
+        viewbox-height: 300;
+        commands: root.path-k;
+        stroke: #ffffff;
+        stroke-width: 1.5px;
+        fill: transparent;
+    }
+
+    Text {
+        x: 6px;
+        y: 4px;
+        text: root.label-r-text;
+        color: #ff5347;
+        font-size: 11px;
+    }
+
+    Text {
+        x: 6px;
+        y: 20px;
+        text: root.label-g-text;
+        color: #3ddc6a;
+        font-size: 11px;
+    }
+
+    Text {
+        x: 6px;
+        y: 36px;
+        text: root.label-b-text;
+        color: #4f9dff;
+        font-size: 11px;
+    }
+
+    Text {
+        x: 6px;
+        y: 52px;
+        text: root.label-k-text;
+        color: #f0f0f0;
+        font-size: 11px;
+    }
+}

@@ -1,0 +1,116 @@
+Windows Registry Editor Version 5.00
+
+; ============================================================
+; EDIT BEFORE USE:
+;   1. Replace MyApp.exe            -> your actual .exe filename
+;   2. Replace C:\\Program Files\\MyApp\\MyApp.exe
+;                                   -> full path to your .exe (use double backslashes)
+;   3. Replace MyApp.Document       -> a unique ProgID for your app (no spaces)
+;   4. Replace "My Application"     -> friendly display name
+;   5. Trim the extension list below to whatever your app actually supports.
+;
+; This version adds your app to the "Open with" menu for each extension
+; WITHOUT forcing it to become the default. See the bottom of the file
+; for the extra lines needed to make it the DEFAULT handler instead.
+; ============================================================
+
+; --- Register the application itself ---
+[HKEY_CURRENT_USER\Software\Classes\Applications\MyApp.exe]
+"FriendlyAppName"="My Application"
+
+[HKEY_CURRENT_USER\Software\Classes\Applications\MyApp.exe\shell\open\command]
+@="\"C:\\\\Program Files\\\\MyApp\\\\MyApp.exe\" \"%1\""
+
+[HKEY_CURRENT_USER\Software\Classes\Applications\MyApp.exe\SupportedTypes]
+".jpg"=""
+".jpeg"=""
+".png"=""
+".gif"=""
+".bmp"=""
+".webp"=""
+".tif"=""
+".tiff"=""
+".ico"=""
+".heic"=""
+".svg"=""
+".mp4"=""
+".mkv"=""
+".avi"=""
+".mov"=""
+".wmv"=""
+".flv"=""
+".webm"=""
+".m4v"=""
+".mpg"=""
+".mpeg"=""
+
+; --- Add the app to "Open with" for images ---
+[HKEY_CURRENT_USER\Software\Classes\.jpg\OpenWithProgids]
+"MyApp.Document"=""
+[HKEY_CURRENT_USER\Software\Classes\.jpeg\OpenWithProgids]
+"MyApp.Document"=""
+[HKEY_CURRENT_USER\Software\Classes\.png\OpenWithProgids]
+"MyApp.Document"=""
+[HKEY_CURRENT_USER\Software\Classes\.gif\OpenWithProgids]
+"MyApp.Document"=""
+[HKEY_CURRENT_USER\Software\Classes\.bmp\OpenWithProgids]
+"MyApp.Document"=""
+[HKEY_CURRENT_USER\Software\Classes\.webp\OpenWithProgids]
+"MyApp.Document"=""
+[HKEY_CURRENT_USER\Software\Classes\.tif\OpenWithProgids]
+"MyApp.Document"=""
+[HKEY_CURRENT_USER\Software\Classes\.tiff\OpenWithProgids]
+"MyApp.Document"=""
+[HKEY_CURRENT_USER\Software\Classes\.ico\OpenWithProgids]
+"MyApp.Document"=""
+[HKEY_CURRENT_USER\Software\Classes\.heic\OpenWithProgids]
+"MyApp.Document"=""
+[HKEY_CURRENT_USER\Software\Classes\.svg\OpenWithProgids]
+"MyApp.Document"=""
+
+; --- Add the app to "Open with" for videos ---
+[HKEY_CURRENT_USER\Software\Classes\.mp4\OpenWithProgids]
+"MyApp.Document"=""
+[HKEY_CURRENT_USER\Software\Classes\.mkv\OpenWithProgids]
+"MyApp.Document"=""
+[HKEY_CURRENT_USER\Software\Classes\.avi\OpenWithProgids]
+"MyApp.Document"=""
+[HKEY_CURRENT_USER\Software\Classes\.mov\OpenWithProgids]
+"MyApp.Document"=""
+[HKEY_CURRENT_USER\Software\Classes\.wmv\OpenWithProgids]
+"MyApp.Document"=""
+[HKEY_CURRENT_USER\Software\Classes\.flv\OpenWithProgids]
+"MyApp.Document"=""
+[HKEY_CURRENT_USER\Software\Classes\.webm\OpenWithProgids]
+"MyApp.Document"=""
+[HKEY_CURRENT_USER\Software\Classes\.m4v\OpenWithProgids]
+"MyApp.Document"=""
+[HKEY_CURRENT_USER\Software\Classes\.mpg\OpenWithProgids]
+"MyApp.Document"=""
+[HKEY_CURRENT_USER\Software\Classes\.mpeg\OpenWithProgids]
+"MyApp.Document"=""
+
+; --- ProgID definition (needed for the OpenWithProgids entries above to work) ---
+[HKEY_CURRENT_USER\Software\Classes\MyApp.Document]
+@="My Application Document"
+
+[HKEY_CURRENT_USER\Software\Classes\MyApp.Document\DefaultIcon]
+@="\"C:\\\\Program Files\\\\MyApp\\\\MyApp.exe\",0"
+
+[HKEY_CURRENT_USER\Software\Classes\MyApp.Document\shell\open\command]
+@="\"C:\\\\Program Files\\\\MyApp\\\\MyApp.exe\" \"%1\""
+
+; ============================================================
+; OPTIONAL: To make your app the DEFAULT handler (not just an
+; "Open with" option) for a given extension, add a block like
+; this for each extension you want to take over by default:
+;
+; [HKEY_CURRENT_USER\Software\Classes\.jpg]
+; @="MyApp.Document"
+;
+; WARNING: This overwrites the current default for that
+; extension on the user's machine, so only do this for
+; extensions you're confident the user wants your app to own,
+; and ideally only after asking (e.g. via an install-time
+; checkbox), not silently.
+; ============================================================

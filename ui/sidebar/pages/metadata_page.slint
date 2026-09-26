@@ -1,0 +1,77 @@
+// metadata_page.slint
+// Read-only image metadata shown in the sidebar's "Metadata" tab.
+// Rows are packed at the top of the panel; empty EXIF rows are hidden.
+import { Palette, Metrics } from "../../theme.slint";
+
+component MetaRow inherits Rectangle {
+    in property <string> label;
+    in property <string> value;
+
+    height: Metrics.metadata-row-height;
+
+    HorizontalLayout {
+        padding-left: Metrics.spacing-md;
+        padding-right: Metrics.spacing-md;
+        spacing: 0px;
+        alignment: start;
+
+        Text {
+            text: root.label;
+            color: Palette.fg-muted;
+            font-size: Metrics.font-size-sm;
+            vertical-alignment: top;
+            horizontal-alignment: left;
+            width: 48px;
+        }
+        Text {
+            text: root.value;
+            color: Palette.fg-primary;
+            font-size: Metrics.font-size-sm;
+            vertical-alignment: top;
+            horizontal-alignment: left;
+            horizontal-stretch: 1;
+            overflow: elide;
+        }
+    }
+}
+
+export component MetadataPage inherits Rectangle {
+    in property <string> filename: "";
+    in property <string> path: "";
+    in property <string> dimensions: "";
+    in property <string> aspect-ratio: "";
+    in property <string> size: "";
+    in property <string> format: "";
+    in property <string> encoding: "";
+    in property <string> source: "File";
+    in property <string> exif-camera: "";
+    in property <string> exif-date: "";
+    in property <string> exif-exposure: "";
+    in property <string> exif-aperture: "";
+    in property <string> exif-iso: "";
+    in property <string> exif-focal: "";
+    in property <string> exif-gps: "";
+
+    VerticalLayout {
+        padding-top: Metrics.spacing-sm;
+        spacing: 1px;
+        alignment: start;  // pack rows at the top
+
+        MetaRow { label: "Name";       value: root.filename; }
+        MetaRow { label: "Path";       value: root.path; }
+        MetaRow { label: "Dims";      value: root.dimensions; }
+        MetaRow { label: "Aspect";    value: root.aspect-ratio; }
+        MetaRow { label: "Size";       value: root.size; }
+        MetaRow { label: "Format";     value: root.format; }
+        if root.encoding != "" : MetaRow { label: "Encoding"; value: root.encoding; }
+        MetaRow { label: "Source";     value: root.source; }
+
+        if root.exif-camera != "" : MetaRow { label: "Camera";   value: root.exif-camera; }
+        if root.exif-date != "" : MetaRow { label: "Date";     value: root.exif-date; }
+        if root.exif-exposure != "" : MetaRow { label: "Exposure"; value: root.exif-exposure; }
+        if root.exif-aperture != "" : MetaRow { label: "Aperture"; value: root.exif-aperture; }
+        if root.exif-iso != "" : MetaRow { label: "ISO";      value: root.exif-iso; }
+        if root.exif-focal != "" : MetaRow { label: "Focal";    value: root.exif-focal; }
+        if root.exif-gps != "" : MetaRow { label: "GPS";      value: root.exif-gps; }
+    }
+}

@@ -1,0 +1,145 @@
+// tabbar.slint — image tab strip shown below the toolbar
+import { Palette, Metrics } from "../theme.slint";
+
+export struct TabEntry {
+    name: string,
+    path: string,
+    is-current: bool,
+}
+
+component TabCloseButton inherits Rectangle {
+    callback clicked();
+    width: 16px;
+    height: 16px;
+    border-radius: 3px;
+    background: touch.has-hover ? Palette.bg-active : transparent;
+
+    touch := TouchArea {
+        clicked => { root.clicked(); }
+        mouse-cursor: pointer;
+    }
+
+    Text {
+        text: "×";
+        font-size: Metrics.font-size-sm * 1.3;
+        color: touch.has-hover ? Palette.bg-app : Palette.fg-muted;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+}
+
+// Fixed on-screen size for a tab (a literal, not stretch/min-max in the
+// layout): the strip scrolls instead of growing, so the number of open
+// tabs can never change this row's -- or therefore the window's --
+// natural width/resize behavior.
+component TabItem inherits Rectangle {
+    in property <string> name;
+    in property <bool> is-current;
+    callback clicked();
+    callback close-clicked();
+
+    // width: 150px;
+    background: root.is-current ? Palette.bg-app : (touch.has-hover ? Palette.bg-panel-alt : transparent);
+    border-width: Metrics.border-width;
+    border-color: Palette.border;
+
+    touch := TouchArea {
+        clicked => { root.clicked(); }
+        mouse-cursor: pointer;
+    }
+
+    // A row's non-stretching children aren't reliably centered on the
+    // cross axis by a bare HorizontalLayout; wrap it in a VerticalLayout
+    // with `alignment: center` (same trick ToolbarIconButton uses) so both
+    // the label and the close button land vertically centered.
+    VerticalLayout {
+        alignment: center;
+
+        HorizontalLayout {
+            padding-left: Metrics.spacing-sm;
+            padding-right: Metrics.spacing-xs;
+            spacing: Metrics.spacing-xs;
+
+            Text {
+                text: root.name;
+                color: root.is-current ? Palette.fg-primary : Palette.fg-muted;
+                font-size: Metrics.font-size-sm;
+                vertical-alignment: center;
+                horizontal-stretch: 1;
+                overflow: elide;
+            }
+
+            TabCloseButton {
+                clicked => { root.close-clicked(); }
+            }
+        }
+    }
+}
+
+component NewTabButton inherits Rectangle {
+    callback clicked();
+    width: Metrics.tabbar-height;
+    height: Metrics.tabbar-height;
+    horizontal-stretch: 0;
+    background: touch.has-hover ? Palette.bg-panel-alt : transparent;
+
+    touch := TouchArea {
+        clicked => { root.clicked(); }
+        mouse-cursor: pointer;
+    }
+
+    Text {
+        text: "+";
+        font-size: Metrics.font-size-md * 1.3;
+        color: Palette.fg-muted;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+}
+
+// Tabs bar
+export component TabBar inherits Rectangle {
+    in property <[TabEntry]> tabs: [];
+    callback tab-clicked(int);
+    callback tab-closed(int);
+    callback new-tab-clicked();
+
+    height: Metrics.tabbar-height;
+    min-width: 0px;
+    background: Palette.bg-panel;
+    clip: true;
+
+    Rectangle {
+        y: parent.height - Metrics.border-width;
+        height: Metrics.border-width;
+        background: Palette.border;
+    }
+
+    HorizontalLayout {
+        padding-left: 0px;
+        padding-right: Metrics.spacing-xs;
+        spacing: Metrics.spacing-xs;
+
+        flick := Flickable {
+            horizontal-stretch: 1;
+            min-width: 0px;
+            max-width: 99999px;
+            viewport-height: self.height;
+
+            HorizontalLayout {
+                spacing: 0px;
+
+                for tab[i] in root.tabs: TabItem {
+                    name: tab.name;
+                    is-current: tab.is-current;
+                    clicked => { root.tab-clicked(i); }
+                    close-clicked => { root.tab-closed(i); }
+                }
+            }
+        }
+
+        NewTabButton {
+            clicked => { root.new-tab-clicked(); }
+        }
+    }
+}

@@ -1,0 +1,700 @@
+// app.slint — root window
+// Importing a font file embeds it in the binary and registers its family
+// for font-family / default-font-family lookups.
+import "../assets/IBM_Plex_Sans/IBMPlexSans-VariableFont_wdth,wght.ttf";
+import {
+    Palette,
+    Metrics,
+    BgColorMode,
+    InterpolationMode,
+    SidebarTab,
+    SortOption,
+} from "theme.slint";
+import { Palette as WidgetPalette } from "std-widgets.slint";
+import { Toolbar } from "widgets/toolbar.slint";
+import { TabBar, TabEntry } from "widgets/tabbar.slint";
+import { ChannelMode } from "sidebar/pages/image_ops_page.slint";
+import { Thumbstrip, ThumbEntry } from "widgets/thumbstrip.slint";
+import { StatusBar } from "widgets/statusbar.slint";
+import { VideoControls } from "widgets/video_controls.slint";
+import { ViewportLegend } from "widgets/viewport_legend.slint";
+import { HistogramOverlay } from "widgets/histogram_overlay.slint";
+import { Sidebar } from "sidebar/sidebar.slint";
+import { FolderRow } from "sidebar/pages/folder_page.slint";
+import { TooltipLayer } from "widgets/tooltip_layer.slint";
+
+// Palette/Metrics/BgColorMode/SidebarTab are re-exported so C++ gets a
+// `global<Palette>()` / `global<Metrics>()` accessor and the two enum types:
+// only globals/types exported (or re-exported) from the *main* .slint file
+// are exposed to the generated C++ header.
+export {
+    ChannelMode,
+    ThumbEntry,
+    TabEntry,
+    WidgetPalette,
+    Palette,
+    Metrics,
+    BgColorMode,
+    InterpolationMode,
+    SidebarTab,
+    SortOption,
+}
+component PixelGrid inherits Rectangle {
+    in property <length> cell: 1px;
+    in property <length> pan-x: 0px;
+    in property <length> pan-y: 0px;
+    in property <length> wrap-w: 0px;
+    in property <length> wrap-h: 0px;
+    in property <length> view-w: 0px;
+    in property <length> view-h: 0px;
+    in property <bool> transposed: false;
+    clip: true;
+
+    property <length> offset-x: (root.wrap-w - root.width) / 2;
+    property <length> offset-y: (root.wrap-h - root.height) / 2;
+    property <length> reach-x: root.transposed ? root.view-w + root.view-h : root.view-w;
+    property <length> reach-y: root.transposed ? root.view-w + root.view-h : root.view-h;
+    property <length> vis-left: root.pan-x - root.offset-x;
+    property <length> vis-top: root.pan-y - root.offset-y;
+    property <int> col-first: max(0, floor((root.vis-left) / root.cell) - 1);
+    property <int> col-last: min(ceil(root.width / root.cell), floor((root.vis-left + root.reach-x) / root.cell) + 2);
+    property <int> row-first: max(0, floor((root.vis-top) / root.cell) - 1);
+    property <int> row-last: min(ceil(root.height / root.cell), floor((root.vis-top + root.reach-y) / root.cell) + 2);
+
+    for i in max(0, root.col-last - root.col-first): Rectangle {
+        x: (root.col-first + i) * root.cell;
+        y: 0;
+        width: 1px;
+        height: 100%;
+        background: #8080808a;
+    }
+    for j in max(0, root.row-last - root.row-first): Rectangle {
+        x: 0;
+        y: (root.row-first + j) * root.cell;
+        width: 100%;
+        height: 1px;
+        background: #8080808a;
+    }
+}
+
+export component AppWindow inherits Window {
+    // Shown as the OS window title, which is also what the taskbar/task
+    // switcher display for this window. Falls back to the plain app name
+    // when no image is open yet.
+    title: root.current-filename == "" ? "Bowser's Image Viewer" : root.current-filename + " — Bowser's Image Viewer";
+    background: Palette.bg-app;
+    icon: @image-url("icon.png");
+    default-font-family: "IBM Plex Sans";
+    default-font-size: Metrics.font-size-sm;
+
+    // Restored inner size. Bound as preferred-* so the first layout uses this
+    // instead of content size, which would overwrite Window::set_size().
+    // Defaults come from Metrics (theme.slint); C++ only overwrites
+    // restored-width/-height once it has read a saved size off disk.
+    in-out property <float> restored-width: Metrics.window-width-default;
+    in-out property <float> restored-height: Metrics.window-height-default;
+    preferred-width: root.restored-width * 1px;
+    preferred-height: root.restored-height * 1px;
+    min-width: Metrics.window-width-min * 1px;
+    min-height: Metrics.window-height-min * 1px;
+
+    // ---- State driven from C++ (AppController) ----
+    in property <image> current-image;
+    in property <string> current-filename: "";
+    in property <int> image-width: 0;
+    in property <int> image-height: 0;
+    in-out property <InterpolationMode> interpolation-mode: InterpolationMode.regular;
+    in-out property <bool> fit-mode: true;
+    in-out property <float> zoom-percent: 100;
+    in property <string> source-label: "";
+    in property <[ThumbEntry]> thumbnails: [];
+    in property <[TabEntry]> tabs: [];
+    in property <[FolderRow]> folder-rows: [];
+    in property <bool> folder-loading: false;
+    in property <int> thumb-current-index: 0;
+    in-out property <ChannelMode> channel-mode: ChannelMode.rgb;
+    in-out property <bool> heatmap-enabled: false;
+    in property <bool> histogram-visible: false;
+    in property <string> histogram-path-r: "";
+    in property <string> histogram-path-g: "";
+    in property <string> histogram-path-b: "";
+    in property <string> histogram-path-k: "";
+    in property <string> histogram-label-r-text: "";
+    in property <string> histogram-label-g-text: "";
+    in property <string> histogram-label-b-text: "";
+    in property <string> histogram-label-k-text: "";
+    in-out property <bool> image-loading: false;
+    in-out property <bool> sidebar-visible: true;
+    in-out property <bool> thumbstrip-visible: true;
+    in-out property <SortOption> sort-option: SortOption.name;
+    in-out property <bool> sort-descending: false;
+    in-out property <SidebarTab> sidebar-active-tab: SidebarTab.metadata;
+    in property <bool> is-favorited: false;
+    in-out property <bool> filter-favorites: false;
+    in-out property <BgColorMode> bg-color-mode: BgColorMode.black;
+    in-out property <bool> dark-mode <=> Palette.dark-mode;
+    in property <string> viewport-message: "";
+    in-out property <length> sidebar-width: Metrics.sidebar-width;
+    in-out property <length> thumbstrip-height: Metrics.thumbstrip-height;
+    in property <string> current-file-path: "";
+    in property <string> current-file-aspect: "";
+    in property <string> current-file-size: "";
+    in property <string> current-file-format: "";
+    in property <string> current-file-encoding: "";
+    in property <string> current-file-source: "";
+    in property <string> current-exif-camera: "";
+    in property <string> current-exif-date: "";
+    in property <string> current-exif-exposure: "";
+    in property <string> current-exif-aperture: "";
+    in property <string> current-exif-iso: "";
+    in property <string> current-exif-focal: "";
+    in property <string> current-exif-gps: "";
+
+    // ---- Video / animated GIF playback (driven by VideoController) ----
+    in property <bool> video-active: false;
+    in property <bool> video-has-audio: false;
+    in property <bool> video-playing: false;
+    in property <float> video-position: 0;     // seconds
+    in property <float> video-duration: 0;     // seconds
+    in property <string> video-time-text: "";
+    in-out property <float> video-volume: 1;   // 0..1
+
+    // ---- View-only transforms ----
+    in-out property <int> rotation: 0;  // 0, 90, 180, 270
+    in-out property <bool> flip-h: false;
+    in-out property <bool> flip-v: false;
+
+    // ---- Transparency checkerboard ----
+    // `checkerboard-image` is 1 pixel per cell; `checker-cell` is the on-screen
+    // cell size (power of 2). The pattern is clipped to the image bounds.
+    in property <bool> has-transparency: false;
+    in property <image> checkerboard-image;
+    in property <length> checker-cell: Metrics.checker-cell-base;
+
+    // ---- Viewport dimensions (read by C++ for zoom clamping) ----
+    out property <float> viewport-w: viewport.width / 1px;
+    out property <float> viewport-h: viewport.height / 1px;
+    out property <float> thumb-viewport-x: thumb.viewport-x;
+    out property <float> thumb-viewport-w: thumb.viewport-w;
+    out property <float> thumb-entry-width: thumb.entry-width;
+    in-out property <length> vp-x: 0;
+    in-out property <length> vp-y: 0;
+
+    // ---- Mouse → image coordinate mapping ----
+    // Compute from root-level properties only (zoom-percent, image dims,
+    // vp-x/y, rotation, flip) to avoid layout loops through img-wrapper/viewport.
+    // In fit mode the effective scale depends on viewport dims, so we only show
+    // coordinates in zoom mode where the math is self-contained.
+    property <float> m-inv-scale: root.fit-mode ? 0 : 100 / max(root.zoom-percent, 0.1);
+    property <length> m-wrap-w: root.image-width * 1px * (root.fit-mode ? 1 : root.zoom-percent / 100);
+    property <length> m-wrap-h: root.image-height * 1px * (root.fit-mode ? 1 : root.zoom-percent / 100);
+    property <length> m-wrap-cx: m-wrap-w / 2;
+    property <length> m-wrap-cy: m-wrap-h / 2;
+    property <length> m-local-x: touch.has-hover ? touch.mouse-x + root.vp-x : 0px;
+    property <length> m-local-y: touch.has-hover ? touch.mouse-y + root.vp-y : 0px;
+    property <length> m-dx: m-local-x - m-wrap-cx;
+    property <length> m-dy: m-local-y - m-wrap-cy;
+    property <angle> m-angle: -root.rotation * 1deg;
+    property <length> m-ux: m-dx * cos(m-angle) - m-dy * sin(m-angle);
+    property <length> m-uy: m-dx * sin(m-angle) + m-dy * cos(m-angle);
+    property <length> m-ux2: root.flip-h ? -m-ux : m-ux;
+    property <length> m-uy2: root.flip-v ? -m-uy : m-uy;
+    property <length> m-orig-x: m-ux2 + m-wrap-cx;
+    property <length> m-orig-y: m-uy2 + m-wrap-cy;
+    property <float> m-pixel-x: m-inv-scale > 0 ? m-orig-x / (1px * (root.zoom-percent / 100)) : -1;
+    property <float> m-pixel-y: m-inv-scale > 0 ? m-orig-y / (1px * (root.zoom-percent / 100)) : -1;
+
+    out property <bool> mouse-in-image: touch.has-hover && !root.fit-mode
+        && root.image-width > 0 && root.image-height > 0
+        && m-pixel-x >= 0 && m-pixel-x < root.image-width
+        && m-pixel-y >= 0 && m-pixel-y < root.image-height;
+    out property <int> mouse-img-x: max(0, min(root.image-width - 1, round(m-pixel-x)));
+    out property <int> mouse-img-y: max(0, min(root.image-height - 1, round(m-pixel-y)));
+
+    // ---- Callbacks into C++ ----
+    callback request-open();
+    callback request-prev();
+    callback request-next();
+    callback request-first();
+    callback request-last();
+    callback request-fit();
+    callback request-zoom-100();
+    callback request-channel-changed(ChannelMode);
+    callback request-thumb-clicked(int);
+    callback request-folder-row-clicked(int);
+    callback center-thumbstrip(int);
+    center-thumbstrip(idx) => { thumb.center-on-index(idx); }
+    callback request-thumbstrip-scrolled(float, float);
+    callback request-heatmap-changed(bool);
+    callback request-rotate-cw();
+    callback request-rotate-ccw();
+    callback request-flip-horz();
+    callback request-flip-vert();
+    callback request-copy();
+    callback request-favorite();
+    callback request-filter-favorites(bool);
+    callback request-bg-color-changed(BgColorMode);
+    callback request-sort-changed(SortOption);
+    callback request-sort-direction-changed(bool);
+    callback request-print();
+    callback request-open-folder();
+    callback request-new-tab();
+    callback request-tab-clicked(int);
+    callback request-tab-closed(int);
+    callback request-video-toggle-pause();
+    callback request-video-step(int /* -1 or +1 */);
+    callback request-video-seek(float /* seconds */, bool /* final */);
+    callback request-video-volume(float);
+    callback request-video-volume-committed();
+    callback request-video-time-display-toggle();
+    callback request-sidebar-toggled(bool);
+    callback request-sidebar-width-changed();
+    callback request-thumbstrip-toggled(bool);
+    callback request-thumbstrip-height-changed();
+    callback request-sidebar-tab-changed(SidebarTab);
+    callback request-dark-mode-changed(bool);
+
+    forward-focus: key-scope;
+
+    key-scope := FocusScope {
+        key-pressed(event) => {
+            if (event.text == Key.LeftArrow && root.thumbnails.length > 1) { root.request-prev(); return accept; }
+            if (event.text == Key.RightArrow && root.thumbnails.length > 1) { root.request-next(); return accept; }
+            if (event.text == Key.Home && root.thumbnails.length > 1) { root.request-first(); return accept; }
+            if (event.text == Key.End && root.thumbnails.length > 1) { root.request-last(); return accept; }
+            if (event.text == Key.Escape) { root.fit-mode = true; root.request-fit(); return accept; }
+            if (event.modifiers.control && event.text == "o") { root.request-open(); return accept; }
+            if (event.modifiers.control && event.text == "c") { root.request-copy(); return accept; }
+            if (event.modifiers.control && event.text == "p") { root.request-print(); return accept; }
+            if (event.modifiers.control && !event.modifiers.shift && event.text == "f") { root.flip-h = !root.flip-h; return accept; }
+            if (event.modifiers.control && event.modifiers.shift && (event.text == "f" || event.text == "F")) { root.flip-v = !root.flip-v; return accept; }
+            if (event.modifiers.control && event.text == "0") { root.fit-mode = true; root.request-fit(); return accept; }
+            if (event.modifiers.control && event.text == ",") { root.rotation = mod(root.rotation + 270, 360); return accept; }
+            if (event.modifiers.control && event.text == ".") { root.rotation = mod(root.rotation + 90, 360); return accept; }
+            if (event.modifiers.shift && (event.text == "r" || event.text == "R")) { root.rotation = mod(root.rotation + 270, 360); return accept; }
+            if (event.text == "r" || event.text == "R") { root.rotation = mod(root.rotation + 90, 360); return accept; }
+            if (root.video-active && event.text == " ") { root.request-video-toggle-pause(); return accept; }
+            if (root.video-active && !event.modifiers.control && event.text == ",") { root.request-video-step(-1); return accept; }
+            if (root.video-active && !event.modifiers.control && event.text == ".") { root.request-video-step(1); return accept; }
+            if (event.text == "f") { root.fit-mode = true; root.request-fit(); return accept; }
+            if (event.text == "1") { root.channel-mode = ChannelMode.rgb; root.request-channel-changed(root.channel-mode); return accept; }
+            if (event.text == "2") { root.channel-mode = ChannelMode.luminance; root.request-channel-changed(root.channel-mode); return accept; }
+            if (event.text == "3") { root.channel-mode = ChannelMode.saturation; root.request-channel-changed(root.channel-mode); return accept; }
+            if (event.text == "4") { root.channel-mode = ChannelMode.sat-hue; root.request-channel-changed(root.channel-mode); return accept; }
+            if (event.text == "5") { root.channel-mode = ChannelMode.adaptive-binary; root.request-channel-changed(root.channel-mode); return accept; }
+            if (event.text == "h" || event.text == "H") {
+                root.heatmap-enabled = !root.heatmap-enabled;
+                root.request-heatmap-changed(root.heatmap-enabled);
+                return accept;
+            }
+            return reject;
+        }
+    }
+
+    HorizontalLayout {
+        Sidebar {
+            visible: root.sidebar-visible;
+            width: root.sidebar-visible ? root.sidebar-width : 0px;
+            folder-rows: root.folder-rows;
+            folder-loading: root.folder-loading;
+            folder-row-clicked(i) => { root.request-folder-row-clicked(i); }
+            active-tab <=> root.sidebar-active-tab;
+            filename: root.current-filename;
+            file-path: root.current-file-path;
+            file-dimensions: root.image-width + " x " + root.image-height;
+            file-aspect-ratio: root.current-file-aspect;
+            file-size: root.current-file-size;
+            file-format: root.current-file-format;
+            file-encoding: root.current-file-encoding;
+            exif-camera: root.current-exif-camera;
+            exif-date: root.current-exif-date;
+            exif-exposure: root.current-exif-exposure;
+            exif-aperture: root.current-exif-aperture;
+            exif-iso: root.current-exif-iso;
+            exif-focal: root.current-exif-focal;
+            exif-gps: root.current-exif-gps;
+            channel-mode: root.channel-mode;
+            heatmap-enabled: root.heatmap-enabled;
+            channel-mode-changed(m) => {
+                root.channel-mode = m;
+                root.request-channel-changed(m);
+            }
+            heatmap-changed(enabled) => {
+                root.heatmap-enabled = enabled;
+                root.request-heatmap-changed(enabled);
+            }
+            tab-changed(i) => { root.request-sidebar-tab-changed(i); }
+        }
+
+        sidebar-resize := Rectangle {
+            visible: root.sidebar-visible;
+            width: root.sidebar-visible ? Metrics.spacing-sm : 0px;
+            background: Palette.bg-panel;
+
+            grab := TouchArea {
+                width: 100%;
+                height: 100%;
+                mouse-cursor: MouseCursor.col-resize;
+
+                property <length> start-x: 0;
+                property <length> start-width: 0;
+
+                pointer-event(e) => {
+                    if (e.kind == PointerEventKind.down) {
+                        self.start-x = self.mouse-x;
+                        self.start-width = root.sidebar-width;
+                    } else if (e.kind == PointerEventKind.move && self.pressed) {
+                        root.sidebar-width = min(min(Metrics.sidebar-width-max, root.width - 360px),
+                                                 max(Metrics.sidebar-width-min,
+                                                     self.start-width + (self.mouse-x - self.start-x)));
+                    } else if (e.kind == PointerEventKind.up) {
+                        root.request-sidebar-width-changed();
+                    }
+                }
+            }
+
+            Rectangle {
+                x: (self.width - Metrics.border-width) / 2;
+                width: Metrics.border-width;
+                height: parent.height;
+                background: grab.pressed ? Palette.accent
+                    : grab.has-hover ? Palette.border-strong
+                    : Palette.border;
+            }
+        }
+
+        VerticalLayout {
+            Toolbar {
+                current-filename: root.current-filename;
+                is-favorited: root.is-favorited;
+                filter-favorites: root.filter-favorites;
+                dark-mode: root.dark-mode;
+                bg-color-mode: root.bg-color-mode;
+                interpolation-mode: root.interpolation-mode;
+                open-clicked => { root.request-open(); }
+                filter-favorites-clicked => {
+                    root.filter-favorites = !root.filter-favorites;
+                    root.request-filter-favorites(root.filter-favorites);
+                }
+                copy-clicked => { root.request-copy(); }
+                favorite-clicked => { root.request-favorite(); }
+                print-clicked => { root.request-print(); }
+                open-folder-clicked => { root.request-open-folder(); }
+                dark-mode-toggled => {
+                    root.dark-mode = !root.dark-mode;
+                    root.request-dark-mode-changed(root.dark-mode);
+                }
+                bg-color-changed => {
+                // Explicit cycle (Slint enums don't support arithmetic), so
+                // adding a mode to BgColorMode in theme.slint is a visible,
+                // one-line change here instead of a `% 3` that silently
+                // stays wrong.
+                root.bg-color-mode = root.bg-color-mode == BgColorMode.black ? BgColorMode.white
+                        : root.bg-color-mode == BgColorMode.white ? BgColorMode.checkerboard
+                        : BgColorMode.black;
+                    root.request-bg-color-changed(root.bg-color-mode);
+                }
+                interpolation-changed => {
+                    root.interpolation-mode = root.interpolation-mode == InterpolationMode.regular ? InterpolationMode.pixel-perfect
+                        : root.interpolation-mode == InterpolationMode.pixel-perfect ? InterpolationMode.pixel-perfect-grid
+                        : InterpolationMode.regular;
+                }
+            }
+
+            TabBar {
+                tabs: root.tabs;
+                tab-clicked(i) => { root.request-tab-clicked(i); }
+                tab-closed(i) => { root.request-tab-closed(i); }
+                new-tab-clicked => { root.request-new-tab(); }
+            }
+
+            // ---- Viewport: manual pan + scroll-wheel zoom ----
+        viewport := Rectangle {
+                vertical-stretch: 1;
+                background: root.bg-color-mode == BgColorMode.black ? #000000
+                    : root.bg-color-mode == BgColorMode.white ? #ffffff
+                    : Palette.bg-viewport;
+                clip: true;
+
+                // Not a DropArea: Slint's winit backend never delivers OS
+                // drag-and-drop, so DropArea can't work here (see README
+                // Limitations). Children are unchanged; this is just a plain
+                // container.
+                drop := Rectangle {
+                    width: 100%;
+                    height: 100%;
+
+                    // The shadow is only worth drawing while the image's edges can be on
+                    // screen. Once zoomed far past the viewport, this rectangle is
+                    // hundreds of thousands of pixels wide and its blur is very
+                    // expensive (and invisible), which made deep zoom laggy.
+                    if !root.fit-mode && !root.image-loading
+                        && max(root.image-width, root.image-height) * 1px * root.zoom-percent / 100
+                        <= 3 * max(viewport.width, viewport.height): Rectangle {
+                        // Image shadow (on child because rotation doesn't apply to shadows)
+                        x: -root.vp-x;
+                        y: -root.vp-y;
+                        width: root.image-width * 1px * root.zoom-percent / 100;
+                        height: root.image-height * 1px * root.zoom-percent / 100;
+                        transform-rotation: root.rotation * 1deg;
+                        transform-origin: { x: self.width / 2, y: self.height / 2 };
+                        transform-scale-x: root.flip-h ? -100% : 100%;
+                        transform-scale-y: root.flip-v ? -100% : 100%;
+
+                        Rectangle {
+                            width: 100%;
+                            height: 100%;
+                            drop-shadow-blur: 6px;
+                            drop-shadow-color: #0000002A;
+                            drop-shadow-offset-y: 2px;
+                        }
+                    }
+
+                    img-wrapper := Rectangle {
+                        x: -root.vp-x;
+                        y: -root.vp-y;
+                        width: root.fit-mode ? parent.width : root.image-width * 1px * root.zoom-percent / 100;
+                        height: root.fit-mode ? parent.height : root.image-height * 1px * root.zoom-percent / 100;
+                        transform-rotation: root.rotation * 1deg;
+                        transform-origin: { x: self.width / 2, y: self.height / 2 };
+                        transform-scale-x: root.flip-h ? -100% : 100%;
+                        transform-scale-y: root.flip-v ? -100% : 100%;
+                        clip: true;
+
+                        // ImageFit.contain rect — checkerboard must match this, not the
+                    // wrapper (wrapper is the full viewport while in fit mode).
+                    property <float> img-scale: (root.image-width <= 0 || root.image-height <= 0) ? 0
+                            : min(self.width / max(root.image-width * 1px, 1px),
+                              self.height / max(root.image-height * 1px, 1px));
+                        property <length> img-w: root.image-width * 1px * self.img-scale;
+                        property <length> img-h: root.image-height * 1px * self.img-scale;
+                    // Device pixels drawn per image pixel (1phx is one physical pixel).
+                    property <float> dev-scale: self.img-scale * (1px / 1phx);
+
+                        if root.has-transparency && !root.image-loading: Rectangle {
+                            x: (img-wrapper.width - img-wrapper.img-w) / 2;
+                            y: (img-wrapper.height - img-wrapper.img-h) / 2;
+                            width: img-wrapper.img-w;
+                            height: img-wrapper.img-h;
+                            background: root.bg-color-mode == BgColorMode.black ? #000000
+                                : root.bg-color-mode == BgColorMode.white ? #ffffff
+                                : Palette.bg-viewport;
+                        }
+
+                        if root.has-transparency && !root.image-loading && root.bg-color-mode == BgColorMode.checkerboard: Rectangle {
+                            x: (img-wrapper.width - img-wrapper.img-w) / 2;
+                            y: (img-wrapper.height - img-wrapper.img-h) / 2;
+                            width: img-wrapper.img-w;
+                            height: img-wrapper.img-h;
+                            clip: true;
+
+                            Image {
+                                source: root.checkerboard-image;
+                                width: root.checkerboard-image.width * root.checker-cell;
+                                height: root.checkerboard-image.height * root.checker-cell;
+                                image-fit: ImageFit.fill;
+                                image-rendering: ImageRendering.pixelated;
+                            }
+                        }
+
+                        // Small images are shown pixel-for-pixel when enlarged (or 1:1), but
+                    // nearest-neighbour is wrong when they are shrunk: it drops pixels
+                    // and shimmers, so use smooth sampling there. While zoomed out the
+                    // C++ side also swaps in a properly filtered copy (see
+                    // AppController::update_display_proxy()).
+                            img := Image {
+                            source: root.current-image;
+                            image-fit: ImageFit.contain;
+                            image-rendering: root.interpolation-mode != InterpolationMode.regular && img-wrapper.dev-scale >= 1 ? ImageRendering.pixelated : ImageRendering.smooth;
+                            width: 100%;
+                            height: 100%;
+                        }
+
+                        if root.interpolation-mode == InterpolationMode.pixel-perfect-grid && img-wrapper.dev-scale >= 4: PixelGrid {
+                            x: (img-wrapper.width - img-wrapper.img-w) / 2;
+                            y: (img-wrapper.height - img-wrapper.img-h) / 2;
+                            width: img-wrapper.img-w;
+                            height: img-wrapper.img-h;
+                            cell: img-wrapper.img-scale * 1px;
+                            pan-x: root.vp-x;
+                            pan-y: root.vp-y;
+                            wrap-w: img-wrapper.width;
+                            wrap-h: img-wrapper.height;
+                            view-w: viewport.width;
+                            view-h: viewport.height;
+                            transposed: mod(root.rotation, 180) != 0;
+                        }
+                    }
+
+                    touch := TouchArea {
+                        width: 100%;
+                        height: 100%;
+                        mouse-cursor: self.pressed ? MouseCursor.grabbing : MouseCursor.grab;
+
+                        property <length> drag-start-x: 0;
+                        property <length> drag-start-y: 0;
+                        property <length> vp-start-x: 0;
+                        property <length> vp-start-y: 0;
+
+                        pointer-event(e) => {
+                            if (e.kind == PointerEventKind.down) {
+                                self.drag-start-x = self.mouse-x;
+                                self.drag-start-y = self.mouse-y;
+                                self.vp-start-x = root.vp-x;
+                                self.vp-start-y = root.vp-y;
+                            } else if (e.kind == PointerEventKind.move && self.pressed) {
+                                root.vp-x = self.vp-start-x - (self.mouse-x - self.drag-start-x);
+                                root.vp-y = self.vp-start-y - (self.mouse-y - self.drag-start-y);
+                            }
+                        }
+
+                        scroll-event(e) => {
+                            if (e.delta-y == 0) { return reject; }
+                            if (root.image-width == 0 || root.image-height == 0) { return reject; }
+
+                        // Effective state *before* this tick. In fit mode the image is drawn at the
+                        // fit scale, centered, so derive the equivalent zoom/pan instead of using
+                        // the stale zoom-percent / vp values.
+                        let iw = root.image-width * 1px;
+                            let ih = root.image-height * 1px;
+                            let old-zoom = root.fit-mode
+                                ? min(parent.width / iw, parent.height / ih) * 100
+                                : root.zoom-percent;
+                            let old-vx = root.fit-mode ? (iw * old-zoom / 100 - parent.width) / 2 : root.vp-x;
+                            let old-vy = root.fit-mode ? (ih * old-zoom / 100 - parent.height) / 2 : root.vp-y;
+
+                        // Clamp the zoom first, then derive the real applied factor from it
+                        let new-zoom = min(5000.0, max(1.0, old-zoom * (e.delta-y > 0 ? 1.1 : (1.0 / 1.1))));
+                            let k = new-zoom / old-zoom;
+
+                            root.fit-mode = false;
+
+                        // Pure cursor-anchored zoom: the image point under the mouse stays put.
+                        // No edge clamping or centering, so the pan is never adjusted.
+                        root.vp-x = (old-vx + self.mouse-x) * k - self.mouse-x;
+                            root.vp-y = (old-vy + self.mouse-y) * k - self.mouse-y;
+                            root.zoom-percent = new-zoom;
+
+                            return accept;
+                        }
+                    }
+                }
+
+                ViewportLegend {
+                    visible: root.heatmap-enabled;
+                    x: Metrics.spacing-md;
+                    y: parent.height - self.height - Metrics.spacing-md;
+                }
+
+                HistogramOverlay {
+                    active: root.channel-mode == ChannelMode.histogram && root.histogram-visible;
+                    x: Metrics.spacing-md;
+                    y: Metrics.spacing-md;
+                    path-r: root.histogram-path-r;
+                    path-g: root.histogram-path-g;
+                    path-b: root.histogram-path-b;
+                    path-k: root.histogram-path-k;
+                    label-r-text: root.histogram-label-r-text;
+                    label-g-text: root.histogram-label-g-text;
+                    label-b-text: root.histogram-label-b-text;
+                    label-k-text: root.histogram-label-k-text;
+                }
+
+                loading-overlay := Rectangle {
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    visible: root.image-loading || root.viewport-message != "";
+                    Text {
+                        text: root.image-loading ? "Loading image..." : root.viewport-message;
+                        color: Palette.fg-muted;
+                        font-size: Metrics.font-size-md;
+                    }
+                }
+            }
+
+            VideoControls {
+                shown: root.video-active;
+                playing: root.video-playing;
+                has-audio: root.video-has-audio;
+                position: root.video-position;
+                duration: root.video-duration;
+                time-text: root.video-time-text;
+                volume: root.video-volume;
+                toggle-pause => { root.request-video-toggle-pause(); }
+                seek(s, final) => { root.request-video-seek(s, final); }
+                volume-changed(v, final) => {
+                    root.video-volume = v;
+                    root.request-video-volume(v);
+                    if (final) {
+                        root.request-video-volume-committed();
+                    }
+                }
+                time-label-clicked => { root.request-video-time-display-toggle(); }
+            }
+
+            thumb := Thumbstrip {
+                shown: root.thumbstrip-visible;
+                entries: root.thumbnails;
+                current-index: root.thumb-current-index;
+                strip-height <=> root.thumbstrip-height;
+            // entry-width is derived from the strip height (see thumbstrip.slint).
+            entry-clicked(i) => { root.request-thumb-clicked(i); }
+                scrolled(vx, vw) => { root.request-thumbstrip-scrolled(vx, vw); }
+                resize-finished => { root.request-thumbstrip-height-changed(); }
+            }
+
+            StatusBar {
+                file-index: root.thumb-current-index;
+                total-files: root.thumbnails.length;
+                image-width: root.image-width;
+                image-height: root.image-height;
+                file-size: root.current-file-size;
+                sidebar-visible: root.sidebar-visible;
+                thumbstrip-visible: root.thumbstrip-visible;
+                sort-option: root.sort-option;
+                sort-descending: root.sort-descending;
+                flip-h: root.flip-h;
+                flip-v: root.flip-v;
+                fit-mode: root.fit-mode;
+                mouse-in-image: root.mouse-in-image;
+                mouse-img-x: root.mouse-img-x;
+                mouse-img-y: root.mouse-img-y;
+                toggle-sidebar => {
+                    root.sidebar-visible = !root.sidebar-visible;
+                    root.request-sidebar-toggled(root.sidebar-visible);
+                }
+                toggle-thumbstrip => {
+                    root.thumbstrip-visible = !root.thumbstrip-visible;
+                    root.request-thumbstrip-toggled(root.thumbstrip-visible);
+                }
+                sort-clicked => {
+                    // Explicit cycle (Slint enums don't support arithmetic), so
+                    // adding an option to SortOption in theme.slint is a
+                    // visible, one-line change here instead of a `% 3` that
+                    // silently stays wrong. Cycle order is name -> date
+                    // modified -> size, matching the alpha/clock/storage
+                    // icons left-to-right as they'd read on the button.
+                    root.sort-option = root.sort-option == SortOption.name ? SortOption.mtime
+                        : root.sort-option == SortOption.mtime ? SortOption.size
+                        : SortOption.name;
+                    root.request-sort-changed(root.sort-option);
+                }
+                sort-direction-clicked => {
+                    root.sort-descending = !root.sort-descending;
+                    root.request-sort-direction-changed(root.sort-descending);
+                }
+                rotate-cw => { root.rotation = mod(root.rotation + 90, 360); }
+                rotate-ccw => { root.rotation = mod(root.rotation + 270, 360); }
+                flip-horz => { root.flip-h = !root.flip-h; }
+                flip-vert => { root.flip-v = !root.flip-v; }
+                prev-clicked => { root.request-prev(); }
+                next-clicked => { root.request-next(); }
+                fit-clicked => { root.fit-mode = true; root.request-fit(); }
+                zoom-100-clicked => { root.fit-mode = false; root.request-zoom-100(); }
+                reset-view-clicked => { root.rotation = 0; root.flip-h = false; root.flip-v = false; }
+            }
+        }
+    }
+
+    TooltipLayer { }
+}

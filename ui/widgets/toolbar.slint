@@ -1,0 +1,214 @@
+// toolbar.slint
+import { Palette, Metrics, BgColorMode, InterpolationMode } from "../theme.slint";
+import { Tooltip } from "tooltip.slint";
+import { Icons } from "../icons.slint";
+
+component ToolbarIconButton inherits Rectangle {
+    in property <bool> enabled: true;
+    in property <bool> active: false;
+    in property <image> icon;
+    in property <bool> has-icon: false;
+    in property <color> icon-color: Palette.fg-muted;
+    // Hover tooltip (also used as the accessible label). Empty = no tooltip.
+    in property <string> tooltip-text: "";
+    // Anchor the tooltip to the button's right edge (for buttons at the window's right edge).
+    in property <bool> tooltip-align-end: false;
+    in property <bool> left-align: false;
+    callback clicked();
+    accessible-role: button;
+    accessible-label: root.tooltip-text;
+    height: Metrics.statusbar-height - 2 * Metrics.spacing-xs;
+    width: self.height;
+    vertical-stretch: 0;
+
+    touch := TouchArea {
+        enabled: root.enabled;
+        clicked => { root.clicked(); }
+        mouse-cursor: root.enabled ? pointer : default;
+    }
+
+    Rectangle {
+        background: !root.enabled ? transparent
+                  : root.active ? (Palette.bg-active)
+                  : (touch.has-hover ? Palette.bg-panel-alt : transparent);
+
+        VerticalLayout {
+            alignment: center;
+            HorizontalLayout {
+                alignment: root.left-align ? start : center;
+                spacing: Metrics.spacing-xs;
+                opacity: root.enabled ? 1.0 : 0.4;
+
+                Image {
+                    source: root.icon;
+                    width: root.has-icon ? Metrics.icon-size : 0px;
+                    height: root.has-icon ? Metrics.icon-size : 0px;
+                    colorize: root.active ? Palette.bg-app : root.icon-color;
+                    visible: root.has-icon;
+                    vertical-alignment: center;
+                }
+                @children
+            }
+        }
+    }
+
+    Tooltip {
+        width: 100%;
+        height: 100%;
+        text: root.tooltip-text;
+        hovered: touch.has-hover && !touch.pressed;
+        align-end: root.tooltip-align-end;
+    }
+}
+
+export component Toolbar inherits Rectangle {
+    in property <string> current-filename: "";
+    in property <bool> is-favorited: false;
+    in property <bool> filter-favorites: false;
+    in property <bool> dark-mode: true;
+    in property <BgColorMode> bg-color-mode: BgColorMode.black;
+    in property <InterpolationMode> interpolation-mode: InterpolationMode.regular;
+
+    // Tooltip texts: override from the parent, or translate via @tr().
+    in property <string> open-tooltip: @tr("Open image (Ctrl+O)");
+    in property <string> filter-favorites-tooltip: @tr("Filter favorites");
+    in property <string> favorite-tooltip: root.is-favorited ? @tr("Remove from favorites") : @tr("Add to favorites");
+    in property <string> copy-tooltip: @tr("Copy image to clipboard");
+    in property <string> print-tooltip: @tr("Print image");
+    in property <string> open-folder-tooltip: @tr("Open containing folder");
+    in property <string> dark-mode-tooltip: root.dark-mode ? @tr("Switch to light mode") : @tr("Switch to dark mode");
+    in property <string> bg-color-tooltip: root.bg-color-mode == BgColorMode.black ? @tr("Background: black")
+                                          : root.bg-color-mode == BgColorMode.white ? @tr("Background: white")
+                                          : @tr("Background: checkerboard");
+    in property <string> interpolation-tooltip: root.interpolation-mode == InterpolationMode.regular ? @tr("Interpolation: regular")
+                                                : root.interpolation-mode == InterpolationMode.pixel-perfect ? @tr("Interpolation: pixel-perfect")
+                                                : @tr("Interpolation: pixel-perfect + grid");
+
+    callback open-clicked <=> open-btn.clicked;
+    callback filter-favorites-clicked();
+    callback copy-clicked();
+    callback favorite-clicked();
+    callback print-clicked();
+    callback open-folder-clicked();
+    callback dark-mode-toggled();
+    callback bg-color-changed();
+    callback interpolation-changed();
+
+    height: Metrics.toolbar-height;
+    background: Palette.bg-panel;
+    border-width: 0px;
+
+    Rectangle {
+        y: parent.height - Metrics.border-width;
+        height: Metrics.border-width;
+        background: Palette.border;
+    }
+
+    HorizontalLayout {
+        padding-top: 2px;
+        spacing: Metrics.spacing-sm;
+        padding-left: Metrics.spacing-sm - 2px;
+        padding-right: Metrics.spacing-sm - 2px;
+
+        open-btn := ToolbarIconButton {
+            width: 44px;
+            tooltip-text: root.open-tooltip;
+            left-align: true;
+            Text {
+                text: "Open";
+                color: Palette.fg-primary;
+                font-size: Metrics.font-size-sm;
+                horizontal-alignment: left;
+                vertical-alignment: center;
+            }
+        }
+
+        Rectangle { horizontal-stretch: 1; }
+
+        HorizontalLayout {
+            spacing: Metrics.spacing-xs;
+            vertical-stretch: 0;
+
+            ToolbarIconButton {
+                tooltip-text: root.filter-favorites-tooltip;
+                tooltip-align-end: true;
+                has-icon: true;
+                icon: Icons.filter;
+                active: root.filter-favorites;
+                icon-color: Palette.fg-muted;
+                clicked => { root.filter-favorites-clicked(); }
+            }
+
+            ToolbarIconButton {
+                tooltip-text: root.interpolation-tooltip;
+                tooltip-align-end: true;
+                has-icon: true;
+                icon: root.interpolation-mode == InterpolationMode.regular ? Icons.autocurve-3d
+                    : root.interpolation-mode == InterpolationMode.pixel-perfect ? Icons.hinton-plot
+                    : Icons.view-table;
+                icon-color: Palette.fg-muted;
+                clicked => { root.interpolation-changed(); }
+            }
+            ToolbarIconButton {
+                tooltip-text: root.bg-color-tooltip;
+                tooltip-align-end: true;
+                has-icon: true;
+                icon: root.bg-color-mode == BgColorMode.black ? Icons.square
+                    : root.bg-color-mode == BgColorMode.white ? Icons.square-unfilled
+                    : Icons.gradient;
+                icon-color: Palette.fg-muted;
+                clicked => { root.bg-color-changed(); }
+            }
+            ToolbarIconButton {
+                tooltip-text: root.dark-mode-tooltip;
+                tooltip-align-end: true;
+                has-icon: true;
+                icon: root.dark-mode ? Icons.light-mode : Icons.dark-mode;
+                icon-color: Palette.fg-muted;
+                clicked => { root.dark-mode-toggled(); }
+            }
+
+            // Extra gap between the mode toggles and the action buttons.
+            Rectangle {
+                width: Metrics.spacing-md;
+                height: 1px;
+                background: transparent;
+                horizontal-stretch: 0;
+                vertical-stretch: 0;
+            }
+
+            ToolbarIconButton {
+                tooltip-text: root.favorite-tooltip;
+                tooltip-align-end: true;
+                has-icon: true;
+                icon: root.is-favorited ? Icons.favorite-filled : Icons.favorite;
+                icon-color: root.is-favorited ? Palette.accent : Palette.fg-muted;
+                clicked => { root.favorite-clicked(); }
+            }
+            ToolbarIconButton {
+                tooltip-text: root.copy-tooltip;
+                tooltip-align-end: true;
+                has-icon: true;
+                icon: Icons.copy-all;
+                icon-color: Palette.fg-muted;
+                clicked => { root.copy-clicked(); }
+            }
+            ToolbarIconButton {
+                tooltip-text: root.print-tooltip;
+                tooltip-align-end: true;
+                has-icon: true;
+                icon: Icons.print;
+                icon-color: Palette.fg-muted;
+                clicked => { root.print-clicked(); }
+            }
+            ToolbarIconButton {
+                tooltip-text: root.open-folder-tooltip;
+                tooltip-align-end: true;
+                has-icon: true;
+                icon: Icons.folder-open;
+                icon-color: Palette.fg-muted;
+                clicked => { root.open-folder-clicked(); }
+            }
+        }
+    }
+}

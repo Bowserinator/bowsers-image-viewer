@@ -1,0 +1,255 @@
+// statusbar.slint
+import { Palette, Metrics, SortOption } from "../theme.slint";
+import { SidebarToggle } from "../sidebar/sidebar_toggle.slint";
+import { Tooltip } from "tooltip.slint";
+import { Icons } from "../icons.slint";
+
+component IconButton inherits Rectangle {
+    in property <bool> active: false;
+    in property <bool> enabled: true;
+    in property <length> button-width: self.height;
+    in property <string> tooltip-text: "";
+    in property <image> icon;
+    in property <bool> has-icon: false;
+    in property <color> icon-color: Palette.fg-muted;
+    in property <bool> tooltip-above: false;
+    callback clicked();
+    height: Metrics.statusbar-height - 2 * Metrics.spacing-xs;
+    width: self.button-width;
+    vertical-stretch: 0;
+    accessible-role: button;
+    accessible-label: root.tooltip-text;
+
+    Rectangle {
+        background: root.enabled ? (root.active ? (Palette.bg-active)
+                  : touch.has-hover ? Palette.bg-panel-alt
+                  : transparent) : transparent;
+
+        touch := TouchArea {
+            enabled: root.enabled;
+            clicked => { root.clicked(); }
+            mouse-cursor: root.enabled ? pointer : default;
+        }
+
+        VerticalLayout {
+            alignment: center;
+            HorizontalLayout {
+                alignment: center;
+                opacity: root.enabled ? 1.0 : 0.4;
+
+                Image {
+                    source: root.icon;
+                    width: root.has-icon ? Metrics.icon-size : 0px;
+                    height: root.has-icon ? Metrics.icon-size : 0px;
+                    colorize: root.icon-color;
+                    visible: root.has-icon;
+                    vertical-alignment: center;
+                }
+                @children
+            }
+        }
+
+        Tooltip {
+            width: 100%;
+            height: 100%;
+            text: root.tooltip-text;
+            hovered: touch.has-hover && !touch.pressed;
+            above: root.tooltip-above;
+        }
+    }
+}
+
+export component StatusBar inherits Rectangle {
+    in property <int> file-index: 0;
+    in property <int> total-files: 0;
+    in property <int> image-width: 0;
+    in property <int> image-height: 0;
+    in property <string> file-size: "";
+    in property <bool> sidebar-visible: true;
+    in property <bool> thumbstrip-visible: true;
+    in property <SortOption> sort-option: SortOption.name;
+    in property <string> sort-tooltip: root.sort-option == SortOption.name ? @tr("Sort by name")
+                                      : root.sort-option == SortOption.size ? @tr("Sort by size")
+                                      : @tr("Sort by date modified");
+    in property <bool> sort-descending: false;
+    in property <string> sort-direction-tooltip: root.sort-descending ? @tr("Sort descending") : @tr("Sort ascending");
+    in property <bool> flip-h: false;
+    in property <bool> flip-v: false;
+    in property <bool> fit-mode: false;
+    in property <bool> mouse-in-image: false;
+    in property <int> mouse-img-x: 0;
+    in property <int> mouse-img-y: 0;
+
+    callback rotate-cw();
+    callback rotate-ccw();
+    callback flip-horz();
+    callback flip-vert();
+    callback toggle-sidebar();
+    callback toggle-thumbstrip();
+    callback sort-clicked();
+    callback sort-direction-clicked();
+    callback prev-clicked();
+    callback next-clicked();
+    callback fit-clicked();
+    callback zoom-100-clicked();
+    callback reset-view-clicked();
+
+    height: Metrics.statusbar-height;
+    background: Palette.bg-panel;
+
+    Rectangle {
+        y: 0px;
+        height: Metrics.border-width;
+        background: Palette.border;
+    }
+
+    VerticalLayout {
+        alignment: center;
+        padding-left: Metrics.spacing-sm;
+        padding-right: Metrics.spacing-sm;
+
+        HorizontalLayout {
+            spacing: Metrics.spacing-md;
+
+            HorizontalLayout {
+                spacing: Metrics.spacing-xs;
+
+                SidebarToggle {
+                    active: root.sidebar-visible;
+                    clicked => { root.toggle-sidebar(); }
+                }
+
+                IconButton {
+                    active: root.thumbstrip-visible;
+                    tooltip-text: @tr("Toggle thumbnail strip");
+                    has-icon: true;
+                    tooltip-above: true;  // lives in the bottom status bar
+                    icon: Icons.flex-no-wrap;
+                    icon-color: root.thumbstrip-visible ? Palette.bg-app : Palette.fg-muted;
+                    clicked => { root.toggle-thumbstrip(); }
+                }
+
+                IconButton {
+                    tooltip-text: root.sort-tooltip;
+                    has-icon: true;
+                    tooltip-above: true;  // lives in the bottom status bar
+                    icon: root.sort-option == SortOption.name ? Icons.sort-alpha
+                        : root.sort-option == SortOption.size ? Icons.sort-size
+                        : Icons.sort-time;
+                    icon-color: Palette.fg-muted;
+                    clicked => { root.sort-clicked(); }
+                }
+
+                IconButton {
+                    tooltip-text: root.sort-direction-tooltip;
+                    has-icon: true;
+                    tooltip-above: true;  // lives in the bottom status bar
+                    icon: root.sort-descending ? Icons.sort-descending : Icons.sort-ascending;
+                    icon-color: Palette.fg-muted;
+                    clicked => { root.sort-direction-clicked(); }
+                }
+            }
+
+            Text {
+                text: root.total-files > 0
+                    ? (root.file-index + 1) + " of " + root.total-files + "  \u{00B7}  " + root.image-width + " x " + root.image-height + "  (" + root.file-size + ")" + (root.mouse-in-image ? "  \u{00B7}  (" + root.mouse-img-x + ", " + root.mouse-img-y + ")" : "")
+                    : root.image-width + " x " + root.image-height + (root.file-size != "" ? "  (" + root.file-size + ")" : "") + (root.mouse-in-image ? "  \u{00B7}  (" + root.mouse-img-x + ", " + root.mouse-img-y + ")" : "");
+                color: Palette.fg-muted;
+                font-size: Metrics.font-size-sm;
+                vertical-alignment: center;
+                vertical-stretch: 0;
+                horizontal-stretch: 1;
+                overflow: elide;
+            }
+
+            HorizontalLayout {
+                spacing: Metrics.spacing-xs;
+
+                IconButton {
+                    enabled: root.total-files > 1;
+                    tooltip-text: @tr("Previous image");
+                    has-icon: true;
+                    tooltip-above: true;
+                    icon: Icons.arrow-back-ios;
+                    icon-color: root.total-files > 1 ? Palette.fg-muted : Palette.fg-disabled;
+                    clicked => { root.prev-clicked(); }
+                }
+                IconButton {
+                    enabled: root.total-files > 1;
+                    tooltip-text: @tr("Next image");
+                    has-icon: true;
+                    tooltip-above: true;
+                    icon: Icons.arrow-forward-ios;
+                    icon-color: root.total-files > 1 ? Palette.fg-muted : Palette.fg-disabled;
+                    clicked => { root.next-clicked(); }
+                }
+            }
+
+            HorizontalLayout {
+                spacing: Metrics.spacing-xs;
+
+                IconButton {
+                    tooltip-text: @tr("Rotate left");
+                    has-icon: true;
+                    tooltip-above: true;
+                    icon: Icons.rotate-left;
+                    icon-color: Palette.fg-muted;
+                    clicked => { root.rotate-ccw(); }
+                }
+                IconButton {
+                    tooltip-text: @tr("Rotate right");
+                    has-icon: true;
+                    tooltip-above: true;
+                    icon: Icons.rotate-right;
+                    icon-color: Palette.fg-muted;
+                    clicked => { root.rotate-cw(); }
+                }
+            }
+
+            HorizontalLayout {
+                spacing: Metrics.spacing-xs;
+
+                IconButton {
+                    active: root.flip-h;
+                    tooltip-text: @tr("Flip horizontal");
+                    has-icon: true;
+                    tooltip-above: true;
+                    icon: Icons.arrow-range;
+                    icon-color: root.flip-h ? Palette.bg-app : Palette.fg-muted;
+                    clicked => { root.flip-horz(); }
+                }
+                IconButton {
+                    active: root.flip-v;
+                    tooltip-text: @tr("Flip vertical");
+                    has-icon: true;
+                    tooltip-above: true;
+                    icon: Icons.swap-vert;
+                    icon-color: root.flip-v ? Palette.bg-app : Palette.fg-muted;
+                    clicked => { root.flip-vert(); }
+                }
+            }
+
+            HorizontalLayout {
+                spacing: Metrics.spacing-xs;
+
+                IconButton {
+                    active: root.fit-mode;
+                    button-width: 48px;
+                    clicked => { root.fit-clicked(); }
+                    Text { text: "Fit"; color: root.fit-mode ? Palette.bg-app : Palette.fg-muted; font-size: Metrics.font-size-sm; vertical-alignment: center; }
+                }
+                IconButton {
+                    active: !root.fit-mode;
+                    button-width: 48px;
+                    clicked => { root.zoom-100-clicked(); }
+                    Text { text: "100%"; color: !root.fit-mode ? Palette.bg-app : Palette.fg-muted; font-size: Metrics.font-size-sm; vertical-alignment: center; }
+                }
+                IconButton {
+                    button-width: 48px;
+                    clicked => { root.reset-view-clicked(); }
+                    Text { text: "Reset"; color: Palette.fg-muted; font-size: Metrics.font-size-sm; vertical-alignment: center; }
+                }
+            }
+        }
+    }
+}
