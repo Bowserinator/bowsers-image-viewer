@@ -11,20 +11,21 @@ namespace biv {
 inline constexpr std::size_t kIMAGE_SNIFF_BYTES = 512;
 
 enum class ImageFormat {
-    Unknown,       // anything else: left to stb_image
+    Unknown,  // anything else: left to stb_image
     Jpeg,
     Png,
     Webp,          // still (or unrecognised) WebP
     WebpAnimated,  // VP8X header with the animation flag set
     Avif,          // any ISO-BMFF "ftyp" file (avif/avis/mif1/...)
     Svg,
+    Jxl,  // JPEG XL: raw codestream or ISOBMFF container
 };
 
 inline bool sniff_looks_like_svg(std::span<const std::byte> head) {
     std::string_view text(reinterpret_cast<const char*>(head.data()), head.size());
     if (text.substr(0, 3) == std::string_view("\xEF\xBB\xBF", 3))
         text.remove_prefix(3);
-    for (;;) {
+    while (true) {
         while (!text.empty() &&
             (text.front() == ' ' || text.front() == '\t' || text.front() == '\r' || text.front() == '\n'))
             text.remove_prefix(1);
@@ -73,6 +74,16 @@ inline ImageFormat sniff_image_format(std::span<const std::byte> head) {
             return ImageFormat::WebpAnimated;
         return ImageFormat::Webp;
     }
+    // JPEG XL: the raw codestream signature, or the 12-byte container
+    // signature box (size 0x0C + "JXL " + 0D 0A 87 0A). Checked before the
+    // generic "ftyp" branch below so a container file with brand "jxl " is
+    // not mistaken for AVIF.
+    if (at(0, std::string_view("\xFF\x0A", 2)))
+        return ImageFormat::Jxl;
+    if (at(0, std::string_view("\x00\x00\x00\x0CJXL \x0D\x0A\x87\x0A", 12)))
+        return ImageFormat::Jxl;
+    if (at(4, "ftyp") && at(8, "jxl "))
+        return ImageFormat::Jxl;
     if (head.size() >= 12 && at(4, "ftyp"))
         return ImageFormat::Avif;
     if (sniff_looks_like_svg(head))

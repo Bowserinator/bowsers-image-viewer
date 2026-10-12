@@ -14,7 +14,7 @@ inline constexpr std::string_view kAPP_VERSION = "1.0.0";
 
 // ---- Image extensions (single source of truth) ----
 // Both directory_model.cpp and archive_source.cpp must use this list.
-inline constexpr std::array<std::string_view, 13> kIMAGE_EXTENSIONS{
+inline constexpr std::array<std::string_view, 14> kIMAGE_EXTENSIONS{
     ".png",
     ".jpg",
     ".jpeg",
@@ -28,6 +28,7 @@ inline constexpr std::array<std::string_view, 13> kIMAGE_EXTENSIONS{
     ".webp",
     ".qoi",
     ".svg",
+    ".jxl",
 };
 
 // ---- Video extensions ----
@@ -73,7 +74,7 @@ inline constexpr auto kALL_EXTENSIONS = kIMAGE_EXTENSIONS;
 #endif
 
 // Extensions whose format can contain an alpha channel.
-inline constexpr std::array<std::string_view, 8> kTRANSPARENT_EXTENSIONS{
+inline constexpr std::array<std::string_view, 9> kTRANSPARENT_EXTENSIONS{
     ".png",
     ".gif",
     ".tga",
@@ -82,6 +83,7 @@ inline constexpr std::array<std::string_view, 8> kTRANSPARENT_EXTENSIONS{
     ".heic",
     ".webp",
     ".svg",
+    ".jxl",
 };
 
 // ---- RGBA pixel constants ----
@@ -131,7 +133,7 @@ inline constexpr int kSLIC_ITERATIONS = 10;
 
 // ---- Thumbnails ----
 inline constexpr int kDEFAULT_THUMBNAIL_MAX_DIM = 128;
-inline constexpr std::size_t kTHUMB_CACHE_CAP   = 512;
+inline constexpr std::size_t kTHUMB_CACHE_CAP   = 128;
 // Upper bound on background thumbnail decoder threads (ui/image_loader.cpp
 // uses half the hardware threads, at least 2). One slow file, such as a huge
 // PNG, must not hold up every thumbnail queued behind it.
@@ -149,6 +151,7 @@ inline constexpr int kBOX_MIN_REDUCTION = 4;
 // Extra thumbs decoded on each side of the visible strip so resize/scroll
 // doesn't leave black tiles. Keep in step with thumbstrip padding math
 inline constexpr std::size_t kTHUMBSTRIP_PREFETCH = 8;
+inline constexpr std::size_t kTHUMBSTRIP_MATERIALIZE_PAD = 64;
 
 inline constexpr int kSVG_RENDER_MIN_DIM = 512;
 inline constexpr int kSVG_RENDER_MAX_DIM = 9000;

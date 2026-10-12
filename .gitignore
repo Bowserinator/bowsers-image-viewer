@@ -1,0 +1,4 @@
+MakeFile
+build/
+build-win/
+build-flatpak/

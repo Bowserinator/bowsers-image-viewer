@@ -190,6 +190,7 @@ AppController::AppController(slint::ComponentHandle<AppWindow> window) : m_windo
     });
     m_window->on_request_tab_clicked([this](int i) { switch_tab(i); });
     m_window->on_request_tab_closed([this](int i) { close_tab(i); });
+    m_window->on_request_tab_moved([this](int from, int to) { reorder_tab(from, to); });
     m_window->on_request_prev([this] { go_prev(); });
     m_window->on_request_next([this] { go_next(); });
     m_window->on_request_first([this] { go_first(); });
@@ -249,7 +250,13 @@ AppController::AppController(slint::ComponentHandle<AppWindow> window) : m_windo
     m_window->on_request_filter_favorites([this](bool on) { set_filter_favorites(on); });
     m_window->on_request_sidebar_toggled([this](bool) { persist_state(); });
     m_window->on_request_sidebar_width_changed([this] { persist_state(); });
-    m_window->on_request_thumbstrip_toggled([this](bool) { persist_state(); });
+    m_window->on_request_thumbstrip_toggled([this](bool visible) {
+        if (visible)
+            refresh_thumbstrip(true, std::nullopt);
+        else
+            teardown_thumbstrip();
+        persist_state();
+    });
     m_window->on_request_thumbstrip_height_changed([this] { persist_state(); });
     m_window->on_request_sidebar_tab_changed([this](SidebarTab) { persist_state(); });
     m_window->on_request_dark_mode_changed([this](bool) {
@@ -422,8 +429,8 @@ bool AppController::is_favorite_source(const ImageSource& src) const {
 }
 
 std::optional<std::size_t> AppController::display_index_of(std::size_t sibling) const {
-    auto it = std::find(m_visible.begin(), m_visible.end(), sibling);
-    if (it == m_visible.end())
+    auto it = std::lower_bound(m_visible.begin(), m_visible.end(), sibling);
+    if (it == m_visible.end() || *it != sibling)
         return std::nullopt;
     return static_cast<std::size_t>(it - m_visible.begin());
 }
@@ -481,7 +488,8 @@ void AppController::show_empty_state(std::string_view message) {
         m_window->set_viewport_message(slint::SharedString(empty_viewport_message()));
     else
         m_window->set_viewport_message(slint::SharedString(std::string(message)));
-    rebuild_thumb_model();
+    m_window->set_thumb_entries_total(static_cast<int>(m_visible.size()));
+    materialize_default_thumb_window();
 }
 
 const char* AppController::empty_viewport_message() const {
@@ -698,7 +706,7 @@ void AppController::apply_favorites_filter() {
         need_reload = true;
     }
 
-    rebuild_thumb_model();
+    materialize_default_thumb_window();
     if (need_reload)
         refresh_current_image();
     else {
@@ -904,6 +912,24 @@ void AppController::close_tab(int index) {
     rebuild_tab_model();
 }
 
+void AppController::reorder_tab(int from, int to) {
+    const auto n = static_cast<int>(m_tabs.size());
+    if (from < 0 || from >= n || to < 0 || to >= n || from == to)
+        return;
+    TabInfo moved = m_tabs[static_cast<std::size_t>(from)];
+    m_tabs.erase(m_tabs.begin() + from);
+    m_tabs.insert(m_tabs.begin() + to, std::move(moved));
+
+    if (m_active_tab == from) {
+        m_active_tab = to;
+    } else if (from < m_active_tab && m_active_tab <= to) {
+        --m_active_tab;
+    } else if (to <= m_active_tab && m_active_tab < from) {
+        ++m_active_tab;
+    }
+    rebuild_tab_model();
+}
+
 void AppController::set_initial_size(float w, float h) {
     w                = std::clamp(w, m_min_window_w, 3840.0f);
     h                = std::clamp(h, m_min_window_h, 2160.0f);
@@ -999,7 +1025,7 @@ void AppController::refresh_current_image() {
     m_window->set_has_transparency(false);
     m_has_transparency = false;
     update_favorite_button();
-    m_load_seq = m_loader.request_main(m_dir->current_index(), m_dir->current(), m_folder_gen);
+    m_load_seq = m_loader.request_main(m_dir->current_index(), m_dir->current(), m_folder_gen, thumbstrip_active());
 
     // Keep the sidebar tree in sync (re-roots it if this folder is outside the tree).
     if (const auto* f = std::get_if<FileSource>(&m_dir->current()))
@@ -1047,6 +1073,8 @@ void AppController::pump_async_results() {
         if (res.folder_gen != m_folder_gen || !m_dir)
             continue;
         if (res.index >= m_dir->siblings().size())
+            continue;
+        if (!thumbstrip_active())
             continue;
         // Cache failures as empty so the reconcile loop doesn't retry forever.
         insert_thumb(res.index, res.pixels ? to_slint_image(std::move(*res.pixels)) : slint::Image());
@@ -1110,7 +1138,7 @@ void AppController::apply_main_document(MainLoadResult&& res) {
 
     show_document_pixels();
     update_histogram_overlay();
-    if (res.thumb)
+    if (res.thumb && thumbstrip_active())
         insert_thumb(res.index, to_slint_image(std::move(*res.thumb)));
 
     m_window->set_fit_mode(true);
@@ -1165,28 +1193,52 @@ void AppController::apply_main_document(MainLoadResult&& res) {
     sync_active_tab();
 }
 
+bool AppController::thumbstrip_active() const {
+    return m_window->get_thumbstrip_visible();
+}
+
+void AppController::teardown_thumbstrip() {
+    m_window->set_thumbnails(std::make_shared<slint::VectorModel<ThumbEntry>>());
+    m_window->set_thumb_entries_offset(0);
+    m_thumb_model = nullptr;
+    m_thumb_window_lo   = 0;
+    m_thumb_window_hi   = 0;
+    m_thumb_model_total = 0;
+    m_thumb_cache.clear();
+    m_thumb_cache.shrink_to_fit();
+    m_thumb_lru.clear();
+    m_thumb_lru_pos.clear();
+    m_pending_thumb_center.reset();
+    m_loader.set_thumb_window(0, 0);
+}
+
 void AppController::refresh_thumbstrip(bool center, std::optional<std::size_t> prev_sibling) {
     if (!m_dir)
         return;
-    if (!m_thumb_model || m_model_gen != m_folder_gen || m_thumb_model->row_count() != m_visible.size()) {
-        rebuild_thumb_model();
+    m_window->set_thumb_entries_total(static_cast<int>(m_visible.size()));
+    if (!thumbstrip_active()) {
+        teardown_thumbstrip();
+        return;
+    }
+    if (!m_thumb_model || m_model_gen != m_folder_gen || m_thumb_model_total != m_visible.size()) {
+        materialize_default_thumb_window();
     } else if (prev_sibling.has_value() && *prev_sibling != m_dir->current_index()) {
         auto flip = [&](std::size_t sibling, bool cur) {
-            auto d = display_index_of(sibling);
-            if (!d || !m_thumb_model)
+            auto row_idx = thumb_row_of(sibling);
+            if (!row_idx || !m_thumb_model)
                 return;
-            auto row = m_thumb_model->row_data(*d);
+            auto row = m_thumb_model->row_data(*row_idx);
             if (!row)
                 return;
             row->is_current = cur;
-            m_thumb_model->set_row_data(*d, *row);
+            m_thumb_model->set_row_data(*row_idx, *row);
         };
         flip(*prev_sibling, false);
         flip(m_dir->current_index(), true);
     }
 
     if (center) {
-        // Don't center synchronously: when rebuild_thumb_model() just above
+        // Don't center synchronously: when materialize_default_thumb_window() just above
         // swapped in a freshly (re)built model -- e.g. the empty state's
         // 0-row model giving way to the first real directory, which is the
         // biggest jump this ever does -- the Thumbstrip's Flickable hasn't
@@ -1201,12 +1253,15 @@ void AppController::refresh_thumbstrip(bool center, std::optional<std::size_t> p
     sync_thumb_window();
 }
 
-void AppController::rebuild_thumb_model() {
+void AppController::rebuild_thumb_model(std::size_t lo, std::size_t hi) {
+    hi = std::min(hi, m_visible.size());
+    lo = std::min(lo, hi);
     std::vector<ThumbEntry> entries;
     if (m_dir) {
-        entries.reserve(m_visible.size());
+        entries.reserve(hi - lo);
         const auto cur = m_dir->current_index();
-        for (std::size_t sib : m_visible) {
+        for (std::size_t d = lo; d < hi; ++d) {
+            const auto sib = m_visible[d];
             ThumbEntry e;
             e.name       = slint::SharedString(display_name(m_dir->siblings()[sib]));
             e.is_current = (sib == cur);
@@ -1217,7 +1272,39 @@ void AppController::rebuild_thumb_model() {
     }
     m_thumb_model = std::make_shared<slint::VectorModel<ThumbEntry>>(std::move(entries));
     m_window->set_thumbnails(m_thumb_model);
+    m_window->set_thumb_entries_offset(static_cast<int>(lo));
+    m_window->set_thumb_entries_total(static_cast<int>(m_visible.size()));
+    m_thumb_window_lo    = lo;
+    m_thumb_window_hi    = hi;
+    m_thumb_model_total  = m_visible.size();
     m_model_gen = m_folder_gen;
+}
+
+void AppController::ensure_thumb_window_materialized(std::size_t want_lo, std::size_t want_hi) {
+    if (m_thumb_model && m_thumb_model_total == m_visible.size() && want_lo >= m_thumb_window_lo
+        && want_hi <= m_thumb_window_hi)
+        return;
+    const auto total  = m_visible.size();
+    const auto mat_lo = want_lo > kTHUMBSTRIP_MATERIALIZE_PAD ? want_lo - kTHUMBSTRIP_MATERIALIZE_PAD : 0;
+    const auto mat_hi = std::min(total, want_hi + kTHUMBSTRIP_MATERIALIZE_PAD);
+    rebuild_thumb_model(mat_lo, mat_hi);
+}
+
+void AppController::materialize_default_thumb_window() {
+    if (!thumbstrip_active())
+        return;
+    const auto total = m_visible.size();
+    const auto cur_d  = m_dir ? display_index_of(m_dir->current_index()).value_or(0) : 0;
+    const auto lo = cur_d > kTHUMBSTRIP_MATERIALIZE_PAD ? cur_d - kTHUMBSTRIP_MATERIALIZE_PAD : 0;
+    const auto hi = std::min(total, cur_d + kTHUMBSTRIP_MATERIALIZE_PAD + 1);
+    rebuild_thumb_model(lo, hi);
+}
+
+std::optional<std::size_t> AppController::thumb_row_of(std::size_t sibling) const {
+    auto d = display_index_of(sibling);
+    if (!d || *d < m_thumb_window_lo || *d >= m_thumb_window_hi)
+        return std::nullopt;
+    return *d - m_thumb_window_lo;
 }
 
 void AppController::submit_display_range(std::size_t first, std::size_t last, std::int32_t priority) {
@@ -1240,12 +1327,12 @@ void AppController::insert_thumb(std::size_t sibling_index, slint::Image image) 
         m_thumb_cache.resize(m_dir->siblings().size());
 
     if (m_thumb_model) {
-        if (auto d = display_index_of(sibling_index)) {
+        if (auto row_idx = thumb_row_of(sibling_index)) {
             ThumbEntry e;
             e.name       = slint::SharedString(display_name(m_dir->siblings()[sibling_index]));
             e.image      = image;
             e.is_current = (sibling_index == m_dir->current_index());
-            m_thumb_model->set_row_data(*d, e);
+            m_thumb_model->set_row_data(*row_idx, e);
         }
     }
 
@@ -1269,7 +1356,7 @@ void AppController::insert_thumb(std::size_t sibling_index, slint::Image image) 
 }
 
 void AppController::on_thumbstrip_scrolled(float viewport_x, float viewport_w) {
-    if (!m_dir || m_visible.empty())
+    if (!m_dir || m_visible.empty() || !thumbstrip_active())
         return;
 
     const auto total   = m_visible.size();
@@ -1293,21 +1380,19 @@ void AppController::on_thumbstrip_scrolled(float viewport_x, float viewport_w) {
         m_loader.set_thumb_window(0, 0);
     }
 
+    ensure_thumb_window_materialized(win_lo, win_hi);
+
     submit_display_range(first, last, kThumbPriorityVisible);
     submit_display_range(win_lo, first, kThumbPriorityAdjacent);
     submit_display_range(last, win_hi, kThumbPriorityAdjacent);
 }
 
 void AppController::sync_thumb_window() {
-    if (!m_dir || m_visible.empty())
+    if (!m_dir || m_visible.empty() || !thumbstrip_active())
         return;
 
-    float vx = 0.0f;
-    float vw = 0.0f;
-    if (m_window->get_thumbstrip_visible()) {
-        vx = m_window->get_thumb_viewport_x();
-        vw = m_window->get_thumb_viewport_w();
-    }
+    float vx = m_window->get_thumb_viewport_x();
+    float vw = m_window->get_thumb_viewport_w();
     if (vw < 1.0f)
         vw = std::max(m_window->get_viewport_w(), 1.0f);
 

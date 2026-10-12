@@ -25,6 +25,11 @@
     #include <webp/demux.h>
 #endif
 
+#ifdef BIV_ENABLE_JXL
+    #include <jxl/codestream_header.h>
+    #include <jxl/decode.h>
+#endif
+
 #include "butil/log.hpp"
 #include "butil/str.hpp"
 #include "butil/util.hpp"
@@ -235,6 +240,94 @@ std::optional<colors::RgbaBuffer> decode_webp(std::span<const std::byte> bytes, 
 }
 #endif
 
+#ifdef BIV_ENABLE_JXL
+struct JxlDecoderDeleter {
+    void operator()(JxlDecoder* d) const { JxlDecoderDestroy(d); }
+};
+
+// libjxl has no scale-on-decode, so a thumbnail decodes the full coalesced
+// frame and to_rgba() shrinks it afterwards (same cost profile as AVIF).
+// Only the first frame of an animated file is decoded: it doubles as the still
+// poster, the way decode_webp_first_frame() behaves for animated WebP.
+std::optional<colors::RgbaBuffer> decode_jxl(std::span<const std::byte> bytes, int max_dim) {
+    std::unique_ptr<JxlDecoder, JxlDecoderDeleter> dec(JxlDecoderCreate(nullptr));
+    if (!dec) {
+        butil::log.error("Failed to create JXL decoder");
+        return std::nullopt;
+    }
+    // Straight alpha out of the decoder, matching what the rest of the app expects.
+    JxlDecoderSetUnpremultiplyAlpha(dec.get(), JXL_TRUE);
+    if (JxlDecoderSubscribeEvents(dec.get(), JXL_DEC_BASIC_INFO | JXL_DEC_FULL_IMAGE) != JXL_DEC_SUCCESS) {
+        butil::log.error("JxlDecoderSubscribeEvents failed");
+        return std::nullopt;
+    }
+    JxlDecoderSetInput(dec.get(), reinterpret_cast<const uint8_t*>(bytes.data()), bytes.size());
+    JxlDecoderCloseInput(dec.get());
+
+    JxlBasicInfo info{};
+    colors::RgbaBuffer buf;
+    bool have_info = false;
+
+    while (true) {
+        const JxlDecoderStatus status = JxlDecoderProcessInput(dec.get());
+        switch (status) {
+            case JXL_DEC_ERROR: butil::log.error("JxlDecoderProcessInput failed"); return std::nullopt;
+            case JXL_DEC_NEED_MORE_INPUT:
+                // CloseInput was called, so running out of bytes means the file is truncated.
+                butil::log.error("Truncated JXL file");
+                return std::nullopt;
+            case JXL_DEC_BASIC_INFO: {
+                if (JxlDecoderGetBasicInfo(dec.get(), &info) != JXL_DEC_SUCCESS) {
+                    butil::log.error("JxlDecoderGetBasicInfo failed");
+                    return std::nullopt;
+                }
+                // Untrusted header: refuse an absurd size before allocating for it.
+                if (!rgba_byte_size(static_cast<std::int64_t>(info.xsize), static_cast<std::int64_t>(info.ysize))) {
+                    butil::log.error("JXL has unsupported dimensions {}x{}", info.xsize, info.ysize);
+                    return std::nullopt;
+                }
+                have_info = true;
+                break;
+            }
+            case JXL_DEC_NEED_IMAGE_OUT_BUFFER: {
+                if (!have_info) {
+                    butil::log.error("JXL asked for pixels before reporting dimensions");
+                    return std::nullopt;
+                }
+                buf.width  = static_cast<int>(info.xsize);
+                buf.height = static_cast<int>(info.ysize);
+                buf.pixels.resize(*rgba_byte_size(buf.width, buf.height));
+                const JxlPixelFormat format{4, JXL_TYPE_UINT8, JXL_NATIVE_ENDIAN, 0};
+                if (JxlDecoderSetImageOutBuffer(dec.get(), &format, buf.pixels.data(), buf.pixels.size()) !=
+                    JXL_DEC_SUCCESS) {
+                    butil::log.error("JxlDecoderSetImageOutBuffer failed");
+                    return std::nullopt;
+                }
+                break;
+            }
+            case JXL_DEC_FULL_IMAGE:
+                // First frame decoded: enough for a still image or animation poster.
+                if (buf.pixels.empty()) {
+                    butil::log.error("JXL reported a frame without pixels");
+                    return std::nullopt;
+                }
+                return to_rgba(buf.pixels.data(),
+                    buf.width,
+                    buf.height,
+                    static_cast<std::size_t>(buf.width) * kBYTES_PER_PIXEL,
+                    max_dim);
+            case JXL_DEC_SUCCESS:
+                // All subscribed events processed without a full image (e.g. no frame data).
+                butil::log.error("JXL decoder finished without producing pixels");
+                return std::nullopt;
+            default:
+                butil::log.error("Unexpected JXL decoder status {}", static_cast<int>(status));
+                return std::nullopt;
+        }
+    }
+}
+#endif
+
 std::optional<colors::RgbaBuffer> decode_stb(std::span<const std::byte> bytes, int max_dim) {
     const auto* data = reinterpret_cast<const stbi_uc*>(bytes.data());
     const int len    = static_cast<int>(bytes.size());  // bounded by kMAX_IMAGE_FILE_BYTES
@@ -325,6 +418,9 @@ std::optional<colors::RgbaBuffer> decode_image_memory(std::span<const std::byte>
 #ifdef BIV_ENABLE_WEBP
         case ImageFormat::Webp:
         case ImageFormat::WebpAnimated: return decode_webp(bytes, max_dim);
+#endif
+#ifdef BIV_ENABLE_JXL
+        case ImageFormat::Jxl: return decode_jxl(bytes, max_dim);
 #endif
 #ifdef BIV_ENABLE_JPEG
         case ImageFormat::Jpeg:

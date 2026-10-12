@@ -47,7 +47,8 @@ public:
     ~ImageLoader();
 
     // Replaces any not-yet-started main request; returns seq to match on drain.
-    [[nodiscard]] std::uint64_t request_main(std::size_t index, const ImageSource& src, std::uint64_t folder_gen);
+    [[nodiscard]] std::uint64_t request_main(
+        std::size_t index, const ImageSource& src, std::uint64_t folder_gen, bool want_thumb = true);
 
     // Queues a thumbnail decode. Returns false if one is already queued/in-flight,
     // or if `index` is outside the current thumb window (see set_thumb_window).
@@ -83,6 +84,7 @@ private:
         std::size_t index = 0;
         ImageSource source;
         std::uint64_t folder_gen = 0;
+        bool want_thumb          = true;
     };
 
     struct ThumbJob {

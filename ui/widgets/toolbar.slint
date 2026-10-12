@@ -62,6 +62,7 @@ component ToolbarIconButton inherits Rectangle {
 }
 
 export component Toolbar inherits Rectangle {
+    cache-rendering-hint: true;
     in property <string> current-filename: "";
     in property <bool> is-favorited: false;
     in property <bool> filter-favorites: false;

@@ -67,6 +67,7 @@ private:
     void add_tab(const std::filesystem::path& path);
     void switch_tab(int index);
     void close_tab(int index);
+    void reorder_tab(int from, int to);
     // Keeps the active tab's path following whatever image ends up on
     // screen (prev/next, thumbnail clicks, the main Open button, ...) so
     // switching away and back lands where the user left off.
@@ -74,9 +75,14 @@ private:
     void rebuild_tab_model();
 
     void refresh_thumbstrip(bool center, std::optional<std::size_t> prev_sibling);
+    void teardown_thumbstrip();
+    [[nodiscard]] bool thumbstrip_active() const;
     void pump_async_results();  // UI-thread drain, fired by m_ui_timer
     void apply_main_document(MainLoadResult&& res);
-    void rebuild_thumb_model();
+    void rebuild_thumb_model(std::size_t lo, std::size_t hi);
+    void materialize_default_thumb_window();
+    void ensure_thumb_window_materialized(std::size_t want_lo, std::size_t want_hi);
+    [[nodiscard]] std::optional<std::size_t> thumb_row_of(std::size_t sibling) const;
     void insert_thumb(std::size_t sibling_index, slint::Image image);
     void submit_display_range(std::size_t first, std::size_t last, std::int32_t priority);
     void sync_thumb_window();
@@ -163,6 +169,9 @@ private:
 
     // Persistent thumbnail model updated per-row as results arrive.
     std::shared_ptr<slint::VectorModel<ThumbEntry>> m_thumb_model;
+    std::size_t m_thumb_window_lo    = 0;
+    std::size_t m_thumb_window_hi    = 0;
+    std::size_t m_thumb_model_total  = 0;
 
     // LRU thumbnail image cache (small downscales), keyed by sibling index.
     std::vector<std::optional<slint::Image>> m_thumb_cache;

@@ -49,13 +49,14 @@ const colors::RgbaBuffer& ImageDocument::view(channel::Mode mode) {
 }
 
 std::shared_ptr<const colors::RgbaBuffer> ImageDocument::view_shared(channel::Mode mode) {
-    const auto idx = static_cast<std::size_t>(mode);
-    if (mode == channel::Mode::RGB || idx >= m_cache.size())
+    if (mode == channel::Mode::RGB)
         return m_original;
 
-    if (!m_cache[idx])
-        m_cache[idx] = std::make_shared<const colors::RgbaBuffer>(channel::apply(*m_original, mode));
-    return m_cache[idx];
+    if (!m_spare || m_spare_mode != mode) {
+        m_spare_mode = mode;
+        m_spare      = std::make_shared<const colors::RgbaBuffer>(channel::apply(*m_original, mode));
+    }
+    return m_spare;
 }
 
 }  // namespace biv

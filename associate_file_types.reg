@@ -33,6 +33,7 @@ Windows Registry Editor Version 5.00
 ".ico"=""
 ".heic"=""
 ".svg"=""
+".jxl"=""
 ".mp4"=""
 ".mkv"=""
 ".avi"=""
@@ -66,6 +67,8 @@ Windows Registry Editor Version 5.00
 [HKEY_CURRENT_USER\Software\Classes\.heic\OpenWithProgids]
 "MyApp.Document"=""
 [HKEY_CURRENT_USER\Software\Classes\.svg\OpenWithProgids]
+"MyApp.Document"=""
+[HKEY_CURRENT_USER\Software\Classes\.jxl\OpenWithProgids]
 "MyApp.Document"=""
 
 ; --- Add the app to "Open with" for videos ---

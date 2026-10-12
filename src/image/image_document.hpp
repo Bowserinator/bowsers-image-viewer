@@ -1,6 +1,5 @@
 #pragma once
 
-#include <array>
 #include <memory>
 #include <optional>
 
@@ -10,9 +9,9 @@
 
 namespace biv {
 
-// Owns one decoded image plus a small cache of its per-channel/analysis
-// derivatives, so switching ChannelBar modes after the first computation is
-// just a lookup, not a recompute.
+// Owns one decoded image plus, at most, one computed non-RGB view: switching
+// to a different mode recomputes and replaces that single spare buffer
+// rather than accumulating one per mode ever visited.
 class ImageDocument {
 public:
     static std::optional<ImageDocument> load(ImageSource source);
@@ -41,8 +40,8 @@ private:
     ImageSource m_source;
     std::shared_ptr<const colors::RgbaBuffer> m_original;
 
-    // One cache slot per Mode value (Mode is a small contiguous enum); null = not computed yet.
-    std::array<std::shared_ptr<const colors::RgbaBuffer>, channel::kCHANNEL_MODE_COUNT> m_cache;
+    channel::Mode m_spare_mode = channel::Mode::RGB;
+    std::shared_ptr<const colors::RgbaBuffer> m_spare;
 };
 
 }  // namespace biv

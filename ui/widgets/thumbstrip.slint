@@ -9,6 +9,8 @@ export struct ThumbEntry {
 
 export component Thumbstrip inherits Rectangle {
     in property <[ThumbEntry]> entries: [];
+    in property <int> entries-offset: 0;
+    in property <int> entries-total: 0;
     in property <int> current-index: 0;
     in property <bool> shown: true;
     // The height the user dragged the strip to. Two-way bound to the window's
@@ -97,11 +99,16 @@ export component Thumbstrip inherits Rectangle {
                 padding: Metrics.spacing-sm;
                 spacing: Metrics.spacing-sm;
 
+                if root.entries-offset > 0 : Rectangle {
+                    width: root.entries-offset * (root.entry-width * 1px + Metrics.spacing-sm) - Metrics.spacing-sm;
+                }
+
                 for entry[i] in root.entries: Rectangle {
                     // Width comes from root.entry-width (see property doc
                     // above); kept as a property, not a literal, so C++ and
                     // Slint can't drift apart on this value.
                     width: root.entry-width * 1px;
+                    cache-rendering-hint: true;
                     border-width: Metrics.border-width;
                     border-color: entry.is-current ? Palette.accent : Palette.border;
                     background: Palette.bg-viewport;
@@ -109,7 +116,7 @@ export component Thumbstrip inherits Rectangle {
                     TouchArea {
                         mouse-cursor: pointer;
                         clicked => {
-                            root.entry-clicked(i);
+                            root.entry-clicked(i + root.entries-offset);
                         }
                     }
 
@@ -120,6 +127,11 @@ export component Thumbstrip inherits Rectangle {
                         height: parent.height - 4px;
                         x: 2px; y: 2px;
                     }
+                }
+
+                if root.entries-offset + root.entries.length < root.entries-total : Rectangle {
+                    width: (root.entries-total - root.entries-offset - root.entries.length)
+                        * (root.entry-width * 1px + Metrics.spacing-sm) - Metrics.spacing-sm;
                 }
             }
         }
