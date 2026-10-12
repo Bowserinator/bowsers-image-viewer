@@ -6,11 +6,11 @@ A simple image viewer built with **C++23** and **[Slint](https://slint.dev/)**
 
 ## Download
 
-**<http://hellomouse.net/~bowserinator/image-viewer>** (Windows 64-bit zip/installer, Linux 64-bit)
+**<https://github.com/Bowserinator/bowsers-image-viewer/releases>** (Windows 64-bit zip/installer, Linux 64-bit)
 
 ## Features
 
-- Opens images and videos (svg, webp, avif, psd, animated gif, etc...)
+- Opens images and videos (svg, webp, avif, jxl, psd, animated gif, etc...)
 - Prev/Next + thumbstrip navigation across a folder **or an archive**
   (`.zip`/`.rar`/`.cbz`/`.cbr`)
 - Respects Windows Explorer's folder sort order
@@ -69,6 +69,7 @@ turn the matching flag off with `-DBIV_ENABLE_<FEATURE>=OFF`:
 | `libarchive` | ZIP/RAR/CBZ/CBR archives | `-DBIV_ENABLE_ARCHIVES=OFF` |
 | `libavif` | AVIF decoding | `-DBIV_ENABLE_AVIF=OFF` |
 | `libwebp` + `libwebpdemux` | WebP decoding | `-DBIV_ENABLE_WEBP=OFF` |
+| `libjxl` | JPEG XL decoding | `-DBIV_ENABLE_JXL=OFF` |
 | FFmpeg ≥ 6.0 (`libavformat` ≥ 60, `libavcodec` ≥ 60, `libavutil`, `libswscale`, `libswresample`) | video / animated GIF playback | `-DBIV_ENABLE_VIDEO=OFF` |
 
 `libjpeg-turbo` and `libpng` are optional: they make JPEG/PNG thumbnails much
@@ -77,16 +78,16 @@ faster, and without them thumbnails fall back to a full-size stb_image decode.
 ```sh
 # Debian/Ubuntu
 sudo apt install cmake g++ rustc pkg-config libexif-dev libarchive-dev \
-    libavif-dev libwebp-dev libjpeg-dev libpng-dev \
+    libavif-dev libwebp-dev libjxl-dev libjpeg-dev libpng-dev \
     libavformat-dev libavcodec-dev libavutil-dev libswscale-dev libswresample-dev
 
 # Fedora
 sudo dnf install cmake gcc-c++ rust pkgconf libexif-devel libarchive-devel \
-    libavif-devel libwebp-devel libjpeg-turbo-devel libpng-devel ffmpeg-devel
+    libavif-devel libwebp-devel libjxl-devel libjpeg-turbo-devel libpng-devel ffmpeg-devel
 
 # macOS
 brew install cmake rust pkg-config libexif libarchive libavif libwebp \
-    ffmpeg libjpeg-turbo libpng
+    jpeg-xl ffmpeg libjpeg-turbo libpng
 ```
 
 ```sh

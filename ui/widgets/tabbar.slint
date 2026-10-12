@@ -35,44 +35,160 @@ component TabCloseButton inherits Rectangle {
 component TabItem inherits Rectangle {
     in property <string> name;
     in property <bool> is-current;
+    in property <int> index;
+    in property <int> tab-count;
+    in property <bool> drag-active;
+    in property <int> drag-from;
+    in property <int> drag-to;
+    in property <length> drag-pointer-x;
     callback clicked();
     callback close-clicked();
+    callback reorder(int, int);
+    callback drag-started(int, length);
+    callback drag-moved(length);
+    callback zone-hover(int);
+    callback drag-ended();
+
+    property <bool> pressed: false;
+    property <length> press-x: 0px;
+    property <length> drag-x: 0px;
+    // True only while this tab is the drag source. TabBar flips drag-active
+    // once the pointer crosses the drag threshold, so a plain click never
+    // lifts the card or moves the cursor to `grabbing`.
+    property <bool> source: root.drag-active && root.index == root.drag-from;
+
+    // Drop zone: the half-open [left, right) span of this tab's slot, with
+    // the first and last tab extended to cover the whole strip, so exactly
+    // one tab always owns the pointer. Derived from real geometry (not a
+    // stride approximation), so uneven tab widths still target correctly.
+    property <length> my-left: self.absolute-position.x;
+    property <bool> in-zone: root.drag-active
+        && (root.index == 0 || root.drag-pointer-x >= root.my-left)
+        && (root.index == root.tab-count - 1 || root.drag-pointer-x < root.my-left + root.width);
+    property <bool> zone-left: root.drag-pointer-x < root.my-left + root.width / 2;
+    // Destination index in the same erase-then-insert semantics reorder()
+    // uses. The source tab's own zone always evaluates to its own index,
+    // so no insertion line shows while the pointer is still over it.
+    property <int> zone-to: root.zone-left
+        ? root.index - ((root.drag-from < root.index) ? 1 : 0)
+        : root.index + 1 - ((root.drag-from <= root.index) ? 1 : 0);
+
+    // The zone owner is the only item that can publish drag-to. Report on
+    // every pointer move (covers half/zone crossings), on drag activation
+    // (covers a fast jump that lands in another zone before the first
+    // move), and on zone-to itself (covers geometry changes). The target
+    // is continuous across zone boundaries, so duplicate reports are
+    // harmless and no transition is ever missed.
+    changed drag-pointer-x => {
+        if (root.in-zone && root.drag-active) {
+            root.zone-hover(root.zone-to);
+        }
+    }
+
+    changed drag-active => {
+        if (root.in-zone && root.drag-active) {
+            root.zone-hover(root.zone-to);
+        }
+    }
+
+    changed zone-to => {
+        if (root.in-zone && root.drag-active) {
+            root.zone-hover(root.zone-to);
+        }
+    }
+
+    property <bool> show-line: root.drag-active && root.drag-from != root.drag-to && root.drag-to == root.index;
+    property <bool> line-on-right: root.drag-from < root.drag-to;
+
+    background: transparent;
+    // 2 = floating drag card above its neighbours, 1 = insertion line above
+    // the following tab's background (it straddles the boundary by 1.5px).
+    z: root.source ? 2 : (root.show-line ? 1 : 0);
 
     // width: 150px;
-    background: root.is-current ? Palette.bg-app : (touch.has-hover ? Palette.bg-panel-alt : transparent);
-    border-width: Metrics.border-width;
-    border-color: Palette.border;
 
     touch := TouchArea {
         clicked => { root.clicked(); }
-        mouse-cursor: pointer;
-    }
+        mouse-cursor: root.source ? grabbing : pointer;
 
-    // A row's non-stretching children aren't reliably centered on the
-    // cross axis by a bare HorizontalLayout; wrap it in a VerticalLayout
-    // with `alignment: center` (same trick ToolbarIconButton uses) so both
-    // the label and the close button land vertically centered.
-    VerticalLayout {
-        alignment: center;
-
-        HorizontalLayout {
-            padding-left: Metrics.spacing-sm;
-            padding-right: Metrics.spacing-xs;
-            spacing: Metrics.spacing-xs;
-
-            Text {
-                text: root.name;
-                color: root.is-current ? Palette.fg-primary : Palette.fg-muted;
-                font-size: Metrics.font-size-sm;
-                vertical-alignment: center;
-                horizontal-stretch: 1;
-                overflow: elide;
-            }
-
-            TabCloseButton {
-                clicked => { root.close-clicked(); }
+        pointer-event(e) => {
+            if (e.kind == PointerEventKind.down && e.button == PointerEventButton.left) {
+                root.pressed = true;
+                root.press-x = self.absolute-position.x + self.mouse-x;
+                root.drag-x = 0px;
+            } else if (e.kind == PointerEventKind.move && root.pressed) {
+                root.drag-x = self.absolute-position.x + self.mouse-x - root.press-x;
+                if (root.drag-active) {
+                    root.drag-moved(self.absolute-position.x + self.mouse-x);
+                } else if (abs(root.drag-x) >= 4px) {
+                    root.drag-started(root.index, self.absolute-position.x + self.mouse-x);
+                }
+            } else if (e.kind == PointerEventKind.up || e.kind == PointerEventKind.cancel) {
+                if (root.drag-active) {
+                    if (root.drag-to != root.index) {
+                        root.reorder(root.index, root.drag-to);
+                    }
+                    root.drag-ended();
+                }
+                root.pressed = false;
+                root.drag-x = 0px;
             }
         }
+    }
+
+    // The tab's whole visual: background, border and content. It stays in
+    // its layout slot at rest (pixel-identical to before) and slides with
+    // the cursor while lifted, leaving the slot empty behind it.
+    card := Rectangle {
+        x: root.source ? root.drag-x : 0px;
+        cache-rendering-hint: root.source;
+        background: root.source ? Palette.bg-app
+            : (root.is-current ? Palette.bg-app : (touch.has-hover ? Palette.bg-panel-alt : transparent));
+        border-width: Metrics.border-width;
+        border-color: root.source ? Palette.border-strong : Palette.border;
+        border-radius: 0px;
+        drop-shadow-blur: root.source ? 6px : 0px;
+        drop-shadow-offset-y: root.source ? 2px : 0px;
+        drop-shadow-color: root.source ? (Palette.dark-mode ? #b3000000 : #40000000) : transparent;
+        animate background, border-color, drop-shadow-blur, drop-shadow-offset-y, drop-shadow-color {
+            duration: 100ms;
+        }
+
+        // A row's non-stretching children aren't reliably centered on the
+        // cross axis by a bare HorizontalLayout; wrap it in a VerticalLayout
+        // with `alignment: center` (same trick ToolbarIconButton uses) so both
+        // the label and the close button land vertically centered.
+        VerticalLayout {
+            alignment: center;
+
+            HorizontalLayout {
+                padding-left: Metrics.spacing-sm;
+                padding-right: Metrics.spacing-xs;
+                spacing: Metrics.spacing-xs;
+
+                Text {
+                    text: root.name;
+                    color: root.is-current ? Palette.fg-primary : Palette.fg-muted;
+                    font-size: Metrics.font-size-sm;
+                    vertical-alignment: center;
+                    horizontal-stretch: 1;
+                    overflow: elide;
+                }
+
+                TabCloseButton {
+                    clicked => { root.close-clicked(); }
+                }
+            }
+        }
+    }
+
+    // Insertion line: straddles the slot boundary where the tab will land.
+    if (root.show-line): Rectangle {
+        x: root.line-on-right ? root.width - 1.5px : -1.5px;
+        y: 2px;
+        width: 3px;
+        height: root.height - 4px;
+        background: Palette.accent;
     }
 }
 
@@ -99,10 +215,19 @@ component NewTabButton inherits Rectangle {
 
 // Tabs bar
 export component TabBar inherits Rectangle {
+    cache-rendering-hint: true;
     in property <[TabEntry]> tabs: [];
     callback tab-clicked(int);
     callback tab-closed(int);
+    callback tab-moved(int, int);
     callback new-tab-clicked();
+
+    // Shared drag state, published by whichever TabItem is the source and
+    // (for drag-to) by the tab that currently owns the pointer's drop zone.
+    property <bool> drag-active: false;
+    property <int> drag-from: -1;
+    property <int> drag-to: -1;
+    property <length> drag-pointer-x: 0px;
 
     height: Metrics.tabbar-height;
     min-width: 0px;
@@ -132,8 +257,28 @@ export component TabBar inherits Rectangle {
                 for tab[i] in root.tabs: TabItem {
                     name: tab.name;
                     is-current: tab.is-current;
+                    index: i;
+                    tab-count: root.tabs.length;
+                    drag-active: root.drag-active;
+                    drag-from: root.drag-from;
+                    drag-to: root.drag-to;
+                    drag-pointer-x: root.drag-pointer-x;
                     clicked => { root.tab-clicked(i); }
                     close-clicked => { root.tab-closed(i); }
+                    reorder(from, to) => { root.tab-moved(from, to); }
+                    drag-started(from, pointer-x) => {
+                        root.drag-active = true;
+                        root.drag-from = from;
+                        root.drag-to = from;
+                        root.drag-pointer-x = pointer-x;
+                    }
+                    drag-moved(pointer-x) => { root.drag-pointer-x = pointer-x; }
+                    zone-hover(to) => { root.drag-to = to; }
+                    drag-ended() => {
+                        root.drag-active = false;
+                        root.drag-from = -1;
+                        root.drag-to = -1;
+                    }
                 }
             }
         }

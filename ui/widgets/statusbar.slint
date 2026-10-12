@@ -60,6 +60,7 @@ component IconButton inherits Rectangle {
 }
 
 export component StatusBar inherits Rectangle {
+    cache-rendering-hint: true;
     in property <int> file-index: 0;
     in property <int> total-files: 0;
     in property <int> image-width: 0;

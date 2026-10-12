@@ -108,6 +108,8 @@ export component AppWindow inherits Window {
     in-out property <float> zoom-percent: 100;
     in property <string> source-label: "";
     in property <[ThumbEntry]> thumbnails: [];
+    in property <int> thumb-entries-offset: 0;
+    in property <int> thumb-entries-total: 0;
     in property <[TabEntry]> tabs: [];
     in property <[FolderRow]> folder-rows: [];
     in property <bool> folder-loading: false;
@@ -241,6 +243,7 @@ export component AppWindow inherits Window {
     callback request-new-tab();
     callback request-tab-clicked(int);
     callback request-tab-closed(int);
+    callback request-tab-moved(int, int);
     callback request-video-toggle-pause();
     callback request-video-step(int /* -1 or +1 */);
     callback request-video-seek(float /* seconds */, bool /* final */);
@@ -258,10 +261,10 @@ export component AppWindow inherits Window {
 
     key-scope := FocusScope {
         key-pressed(event) => {
-            if (event.text == Key.LeftArrow && root.thumbnails.length > 1) { root.request-prev(); return accept; }
-            if (event.text == Key.RightArrow && root.thumbnails.length > 1) { root.request-next(); return accept; }
-            if (event.text == Key.Home && root.thumbnails.length > 1) { root.request-first(); return accept; }
-            if (event.text == Key.End && root.thumbnails.length > 1) { root.request-last(); return accept; }
+            if (event.text == Key.LeftArrow && root.thumb-entries-total > 1) { root.request-prev(); return accept; }
+            if (event.text == Key.RightArrow && root.thumb-entries-total > 1) { root.request-next(); return accept; }
+            if (event.text == Key.Home && root.thumb-entries-total > 1) { root.request-first(); return accept; }
+            if (event.text == Key.End && root.thumb-entries-total > 1) { root.request-last(); return accept; }
             if (event.text == Key.Escape) { root.fit-mode = true; root.request-fit(); return accept; }
             if (event.modifiers.control && event.text == "o") { root.request-open(); return accept; }
             if (event.modifiers.control && event.text == "c") { root.request-copy(); return accept; }
@@ -405,6 +408,7 @@ export component AppWindow inherits Window {
                 tabs: root.tabs;
                 tab-clicked(i) => { root.request-tab-clicked(i); }
                 tab-closed(i) => { root.request-tab-closed(i); }
+                tab-moved(from, to) => { root.request-tab-moved(from, to); }
                 new-tab-clicked => { root.request-new-tab(); }
             }
 
@@ -635,6 +639,8 @@ export component AppWindow inherits Window {
             thumb := Thumbstrip {
                 shown: root.thumbstrip-visible;
                 entries: root.thumbnails;
+                entries-offset: root.thumb-entries-offset;
+                entries-total: root.thumb-entries-total;
                 current-index: root.thumb-current-index;
                 strip-height <=> root.thumbstrip-height;
             // entry-width is derived from the strip height (see thumbstrip.slint).
@@ -645,7 +651,7 @@ export component AppWindow inherits Window {
 
             StatusBar {
                 file-index: root.thumb-current-index;
-                total-files: root.thumbnails.length;
+                total-files: root.thumb-entries-total;
                 image-width: root.image-width;
                 image-height: root.image-height;
                 file-size: root.current-file-size;

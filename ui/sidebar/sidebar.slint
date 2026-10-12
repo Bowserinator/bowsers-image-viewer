@@ -34,6 +34,7 @@ component TabButton inherits Rectangle {
 }
 
 export component Sidebar inherits Rectangle {
+    cache-rendering-hint: true;
     in property <string> filename;
     in property <string> file-path;
     in property <string> file-dimensions;

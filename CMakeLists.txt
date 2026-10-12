@@ -22,6 +22,7 @@ endif()
 option(BIV_ENABLE_ARCHIVES "Enable opening images directly from .zip/.rar via libarchive" ON)
 option(BIV_ENABLE_AVIF "Enable AVIF decoding via libavif" ON)
 option(BIV_ENABLE_WEBP "Enable WebP decoding via libwebp" ON)
+option(BIV_ENABLE_JXL "Enable JPEG XL decoding via libjxl" ON)
 option(BIV_ENABLE_VIDEO "Enable video + animated GIF playback via FFmpeg and miniaudio" ON)
 option(BIV_ENABLE_JPEG "Fast JPEG thumbnails via libjpeg-turbo DCT scaling (falls back to stb_image if not found)" ON)
 option(BIV_ENABLE_PNG "Fast PNG thumbnails via libpng row streaming (falls back to stb_image if not found)" ON)
@@ -47,6 +48,7 @@ FetchContent_Declare(
 
 set(SLINT_FEATURE_INTERPRETER OFF CACHE BOOL "" FORCE)
 set(SLINT_FEATURE_LIVE_PREVIEW OFF CACHE BOOL "" FORCE)
+set(SLINT_FEATURE_RENDERER_SKIA OFF CACHE BOOL "" FORCE)
 
 FetchContent_MakeAvailable(Slint)
 
@@ -72,7 +74,7 @@ if(BIV_ENABLE_ARCHIVES)
     find_package(LibArchive REQUIRED)
 endif()
 
-if(BIV_ENABLE_AVIF OR BIV_ENABLE_WEBP)
+if(BIV_ENABLE_AVIF OR BIV_ENABLE_WEBP OR BIV_ENABLE_JXL)
     find_package(PkgConfig REQUIRED)
 endif()
 
@@ -84,6 +86,10 @@ if(BIV_ENABLE_WEBP)
     # libwebpdemux provides WebPAnimDecoder, used to pull a still first frame
     # out of animated WebP files.
     pkg_check_modules(WEBP REQUIRED libwebp libwebpdemux)
+endif()
+
+if(BIV_ENABLE_JXL)
+    pkg_check_modules(JXL REQUIRED libjxl)
 endif()
 
 pkg_check_modules(LIBEXIF REQUIRED libexif)
@@ -238,6 +244,13 @@ if(BIV_ENABLE_WEBP)
     target_include_directories(bowsers_image_viewer PRIVATE ${WEBP_INCLUDE_DIRS})
     target_link_directories(bowsers_image_viewer PRIVATE ${WEBP_LIBRARY_DIRS})
     target_link_libraries(bowsers_image_viewer PRIVATE ${WEBP_LIBRARIES})
+endif()
+
+if(BIV_ENABLE_JXL)
+    target_compile_definitions(bowsers_image_viewer PRIVATE BIV_ENABLE_JXL=1)
+    target_include_directories(bowsers_image_viewer PRIVATE ${JXL_INCLUDE_DIRS})
+    target_link_directories(bowsers_image_viewer PRIVATE ${JXL_LIBRARY_DIRS})
+    target_link_libraries(bowsers_image_viewer PRIVATE ${JXL_LIBRARIES})
 endif()
 
 if(BIV_ENABLE_JPEG)

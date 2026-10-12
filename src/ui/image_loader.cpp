@@ -44,10 +44,11 @@ ImageLoader::~ImageLoader() {
     m_resize_cv.notify_all();
 }
 
-std::uint64_t ImageLoader::request_main(std::size_t index, const ImageSource& src, std::uint64_t folder_gen) {
+std::uint64_t ImageLoader::request_main(
+    std::size_t index, const ImageSource& src, std::uint64_t folder_gen, bool want_thumb) {
     std::lock_guard lk(m_mutex);
     const auto seq = ++m_last_main_seq;
-    m_main_request = MainRequest{seq, index, src, folder_gen};
+    m_main_request = MainRequest{seq, index, src, folder_gen, want_thumb};
     m_main_cv.notify_one();
     return seq;
 }
@@ -165,8 +166,9 @@ void ImageLoader::main_loop(std::stop_token stop) {
         try {
             auto decoded = ImageDocument::load(req->source);
             if (decoded) {
-                out.thumb = channel::make_thumbnail(decoded->view(channel::Mode::RGB));
-                out.doc   = std::move(decoded);
+                if (req->want_thumb)
+                    out.thumb = channel::make_thumbnail(decoded->view(channel::Mode::RGB));
+                out.doc = std::move(decoded);
             } else {
                 butil::log.error("Async load failed for '{}'", display_name(req->source));
             }
